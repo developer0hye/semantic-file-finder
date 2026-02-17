@@ -324,12 +324,29 @@ Response format:
 
 ## 7. User Experience
 
-### 7.1 Desktop GUI (Tauri)
+### 7.1 Initial Setup (First Launch)
+
+앱 첫 실행 시 사용자에게 다음을 안내:
+
+1. **Gemini API Key 입력** — 앱이 동작하려면 Google Gemini API 키가 필요
+   - 설정 화면에서 API 키 입력란 제공
+   - API 키 발급 방법 안내 링크 포함 (https://aistudio.google.com/apikey)
+   - 입력 후 유효성 검증 (Gemini API health check 호출)
+   - 유효하지 않은 키 → 에러 메시지와 재입력 유도
+   - API 키는 OS keychain에 저장 (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+2. **검색 대상 디렉토리 선택** — 두 가지 모드 제공:
+   - **디렉토리 선택 모드** (기본) — 사용자가 지정한 폴더의 모든 하위 파일을 재귀적으로 분석
+   - **전체 드라이브 스캔 모드** — 시스템의 모든 드라이브/마운트 포인트를 탐색하여 지원되는 모든 파일을 분석. OS/시스템 디렉토리(Windows: `C:\Windows`, macOS: `/System`, Linux: `/proc`, `/sys` 등), 숨김 폴더(`.git`, `node_modules` 등)는 기본 제외. 파일 수가 매우 많을 수 있으므로 예상 소요 시간/비용 안내 후 사용자 확인 필요.
+3. **인덱싱 시작** — 선택한 범위의 파일을 백그라운드에서 인덱싱
+
+API 키가 설정되지 않으면 검색/인덱싱 기능이 비활성화되어야 함.
+
+### 7.2 Desktop GUI (Tauri)
 
 - Search bar (main screen) — type natural language query
 - Results list with file path, summary, similarity score
 - Click to open file in default application
-- Settings page: API key input, directory selection, indexing status
+- Settings page: API key 관리, directory selection, indexing status
 - System tray: background file watching daemon
 
 ### 7.2 Supported File Formats
