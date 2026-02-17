@@ -1,0 +1,12 @@
+services:
+  experiment:
+    build: .
+    env_file:
+      - ../../.env
+    environment:
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-flash-preview}
+      - GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+      - GEMINI_EMBEDDING_DIMENSIONS=${GEMINI_EMBEDDING_DIMENSIONS:-1536}
+    volumes:
+      - ./test_files:/app/test_files
+      - ./results:/app/results
