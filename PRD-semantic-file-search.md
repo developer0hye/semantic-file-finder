@@ -403,6 +403,22 @@ The indexing pipeline is implemented with tokio-based async processing, with the
 | DB Write | `tokio::sync::RwLock` on DB connection | RwLock enables concurrent indexing (write) and search (read) |
 | Search Requests | Search available during indexing (read lock) | Search responds immediately based on current DB state |
 
+**Async parallel file analysis:**
+
+Multiple files are analyzed concurrently via async Gemini API calls. Each file's analysis (generateContent) and embedding (embedContent) are independent API requests that execute in parallel, controlled by a semaphore to respect rate limits. This maximizes indexing throughput by overlapping network I/O across files.
+
+```
+File A ──▶ [convert] ──▶ [analyze API ↗] ──▶ [embed API ↗] ──▶ [store]
+File B ──▶ [convert] ──▶ [analyze API ↗] ──▶ [embed API ↗] ──▶ [store]
+File C ──▶ [convert] ──▶ [analyze API ↗] ──▶ [embed API ↗] ──▶ [store]
+                         ← semaphore-bounded concurrent requests →
+```
+
+- Each file spawns an independent async task (`tokio::spawn`)
+- Semaphore limits total in-flight Gemini API calls (Free tier: 5, Paid: 50)
+- Conversion (anytomd) runs in `spawn_blocking` to avoid blocking the async runtime
+- DB writes are serialized via `Mutex` to prevent SQLite write contention
+
 **Indexing pause/resume:**
 - On app shutdown, save current queue state to SQLite `pending_files` table
 - On app restart, resume processing from pending files
