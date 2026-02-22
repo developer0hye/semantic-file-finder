@@ -25,6 +25,9 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    #[error("Document conversion failed: {path}")]
+    ConversionFailed { path: String, detail: String },
+
     #[error("Database error")]
     Database(#[from] rusqlite::Error),
 
@@ -66,6 +69,11 @@ impl From<&AppError> for ErrorResponse {
             AppError::Keychain(msg) => ErrorResponse {
                 code: "KEYCHAIN".into(),
                 message: format!("Keychain error: {msg}"),
+                recoverable: true,
+            },
+            AppError::ConversionFailed { path, detail } => ErrorResponse {
+                code: "CONVERSION_FAILED".into(),
+                message: format!("Document conversion failed for {path}: {detail}"),
                 recoverable: true,
             },
             AppError::Database(e) => ErrorResponse {
