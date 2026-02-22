@@ -40,6 +40,22 @@ impl GeminiClient {
         }
     }
 
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+
+    pub fn embedding_dimensions(&self) -> u32 {
+        self.embedding_dimensions
+    }
+
     /// Analyze text content using Gemini generateContent.
     pub async fn analyze_text(&self, text: &str) -> Result<DocumentAnalysis, AppError> {
         let prompt = format!(

@@ -33,6 +33,7 @@ lindera = { version = "2", features = ["embed-ko-dic"] }
 lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 blake3 = "1"
 walkdir = "2"
+tauri-plugin-opener = "2"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
