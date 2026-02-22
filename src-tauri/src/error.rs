@@ -40,6 +40,9 @@ pub enum AppError {
     #[error("Database error")]
     Database(#[from] rusqlite::Error),
 
+    #[error("Search index error: {0}")]
+    SearchIndex(String),
+
     #[error("{0}")]
     Internal(String),
 }
@@ -106,6 +109,11 @@ impl From<&AppError> for ErrorResponse {
             AppError::Database(e) => ErrorResponse {
                 code: "DATABASE".into(),
                 message: format!("Database error: {e}"),
+                recoverable: true,
+            },
+            AppError::SearchIndex(msg) => ErrorResponse {
+                code: "SEARCH_INDEX".into(),
+                message: format!("Search index error: {msg}"),
                 recoverable: true,
             },
             AppError::Internal(msg) => ErrorResponse {
