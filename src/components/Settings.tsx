@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, IndexedStats, IndexingStatus } from "../types";
 import {
   getConfig,
@@ -73,15 +74,31 @@ export default function Settings() {
     }
   }
 
-  async function handleAddDirectory() {
-    if (!config || newDirectory.trim().length === 0) return;
-    const dir = newDirectory.trim();
+  async function addDirectoryToConfig(dir: string) {
+    if (!config) return;
     if (config.watch_directories.includes(dir)) return;
     const updated = { ...config, watch_directories: [...config.watch_directories, dir] };
     try {
       await updateConfig(updated);
       setConfig(updated);
-      setNewDirectory("");
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function handleAddDirectory() {
+    if (!config || newDirectory.trim().length === 0) return;
+    await addDirectoryToConfig(newDirectory.trim());
+    setNewDirectory("");
+  }
+
+  async function handleBrowseDirectory() {
+    if (!config) return;
+    try {
+      const selected = await open({ directory: true, title: "Select directory" });
+      if (selected) {
+        await addDirectoryToConfig(selected);
+      }
     } catch (err) {
       setError(String(err));
     }
@@ -178,6 +195,9 @@ export default function Settings() {
           />
           <button onClick={handleAddDirectory} disabled={newDirectory.trim().length === 0}>
             Add
+          </button>
+          <button onClick={handleBrowseDirectory}>
+            Browse
           </button>
         </div>
         <ul className="directory-list">
