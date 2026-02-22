@@ -555,7 +555,54 @@ Response format:
 // POST to embedContent with task_type RETRIEVAL_DOCUMENT or RETRIEVAL_QUERY
 ```
 
-### 6.3 Rate Limit Handling
+### 6.3 PDF Processing via Gemini Files API (Official)
+
+**PDF files MUST be processed using Gemini's native PDF understanding** — not converted to text or images first. Gemini natively analyzes PDF text, images, diagrams, charts, and tables in a single pass, preserving visual context that text extraction alone would lose.
+
+Reference: https://ai.google.dev/gemini-api/docs/document-processing
+
+#### Why Gemini-native PDF processing
+
+| Approach | Quality | What's Lost |
+|----------|---------|-------------|
+| Gemini Files API (native) | Highest | Nothing — full visual + text context preserved |
+| Text extraction → Gemini | Low | Tables, charts, images, layout, scanned text |
+| Convert to images → Gemini | Medium | Searchable text, link structure |
+
+#### Processing flow
+
+```
+1. Upload:   POST https://generativelanguage.googleapis.com/upload/v1beta/files
+             Content-Type: application/pdf
+             → returns { file: { uri: "...", state: "ACTIVE" } }
+
+2. Analyze:  POST .../models/gemini-3-flash-preview:generateContent
+             parts: [{ file_data: { file_uri: "...", mime_type: "application/pdf" } }]
+             → returns summary, keywords, doc_type
+
+3. Embed:    Send analysis summary to embedContent API
+```
+
+#### Technical limits
+
+| Property | Value |
+|----------|-------|
+| Max file size | 50 MB |
+| Max pages | 1,000 |
+| Token cost per page | ~258 tokens (medium resolution) |
+| Max resolution | 3,072 × 3,072 pixels per page |
+| Scanned PDF (OCR) | Natively supported via Gemini vision |
+| File expiration | 48 hours after upload — process immediately |
+
+#### Implementation rules
+
+- **Always upload PDF as-is** to the Files API. Never use anytomd or other converters for PDF.
+- Use `application/pdf` as the MIME type.
+- After upload, verify `state == "ACTIVE"` before sending to `generateContent`.
+- Process (analyze + embed) immediately after upload to avoid 48-hour file expiration.
+- For scanned PDFs or image-heavy PDFs, Gemini automatically applies OCR — no special handling needed.
+
+### 6.4 Rate Limit Handling
 
 | Tier | RPM | TPM | RPD |
 |------|-----|-----|-----|
@@ -567,7 +614,7 @@ Response format:
 - Implement exponential backoff retry logic
 - Files API uploads have no separate rate limit
 
-### 6.4 Cost Estimation (Single PC)
+### 6.5 Cost Estimation (Single PC)
 
 Estimated Gemini API costs when a single PC user indexes local files:
 

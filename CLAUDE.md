@@ -11,6 +11,7 @@
   - Supported file types: https://ai.google.dev/gemini-api/docs/vision (images), https://ai.google.dev/gemini-api/docs/document-processing (documents)
   - Embedding API: https://ai.google.dev/gemini-api/docs/embeddings
 - Default models: `gemini-3-flash-preview` (embedding: `gemini-embedding-001`, 1536 dimensions)
+- **PDF files must be processed via Gemini's native PDF understanding** (Files API upload → generateContent). Never convert PDFs to text/images before sending to Gemini — see PRD Section 6.3 for details.
 - Model IDs, supported formats, and parameters may change — always verify with the latest official docs before implementation
 - Do not blindly trust LLM-generated information (supported formats, API specs, etc.) — validate against official documentation
 
