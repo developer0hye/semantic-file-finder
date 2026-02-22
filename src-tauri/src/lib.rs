@@ -6,7 +6,9 @@ pub mod gemini;
 pub mod keychain;
 pub mod logging;
 pub mod platform;
+pub mod search;
 pub mod tantivy_index;
+pub mod vector_search;
 
 use tauri::Manager;
 use tracing::info;
