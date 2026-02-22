@@ -214,6 +214,11 @@ Follow all steps in order — do not skip any.
 ## anytomd Integration Policy
 
 - Use the `anytomd` Rust crate for document conversion (see PRD)
+- **Always use the latest version.** Do NOT pin to a fixed version.
+  - Before every PR that touches `src-tauri/`, check the latest anytomd version on crates.io: https://crates.io/crates/anytomd
+  - If a newer version exists, update `Cargo.toml` (`anytomd = "<latest>"`) and review the changelog for breaking changes or new features
+  - Apply any relevant upstream improvements (new formats, API changes, bug fixes) to this project in the same PR
+  - `Cargo.toml` must use a **minor-level** version spec (e.g., `"0.7"`) to auto-receive patch updates, but bump the minor/major when a new release is available
 - If bugs, unsupported formats, or conversion quality issues are discovered while using anytomd, contribute improvements directly to the anytomd repository
   - anytomd repo: https://github.com/developer0hye/anytomd-rs
   - File issues or submit PRs with fixes

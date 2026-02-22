@@ -228,6 +228,7 @@ On Ubuntu server/minimal installations where GNOME Keyring may not be available,
 |------|-----------|-------|
 | Converter | **[anytomd](https://crates.io/crates/anytomd)** | Pure Rust reimplementation of Microsoft MarkItDown. DOCX/PPTX/XLSX/CSV/JSON → Markdown + image extraction |
 | Integration | `cargo add anytomd` | Rust crate — no sidecar, no Python, no external runtime |
+| Version policy | **Always latest** | Do not pin to a fixed version. Check crates.io before every PR, update and apply upstream changes (new formats, bug fixes, API changes) |
 | Formats | DOCX, PPTX, XLSX, CSV, JSON, Plain Text | OOXML direct parsing via `zip` + `quick-xml`, XLSX via `calamine` |
 
 ### 3.3 Why anytomd over MarkItDown (Python) / LibreOffice
@@ -251,6 +252,7 @@ On Ubuntu server/minimal installations where GNOME Keyring may not be available,
 - No Python sidecar needed, eliminating PyInstaller bundling, cross-platform build issues, and IPC overhead
 - Built-in image extraction for DOCX/PPTX — no separate ZIP parsing code required
 - Developed by the same author, enabling direct addition/modification of features needed for semantic-file-search
+- **Version policy:** Always track the latest anytomd release. Before every PR that touches `src-tauri/`, check crates.io for new versions, update `Cargo.toml`, review the changelog, and apply any relevant upstream improvements (new supported formats, API changes, bug fixes) to this project
 
 ### 3.5 AI Model Details
 
