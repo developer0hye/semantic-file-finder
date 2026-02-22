@@ -23,6 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 dirs = "6"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+rusqlite = { version = "0.34", features = ["bundled"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

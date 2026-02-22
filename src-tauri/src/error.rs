@@ -25,6 +25,9 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    #[error("Database error")]
+    Database(#[from] rusqlite::Error),
+
     #[error("{0}")]
     Internal(String),
 }
@@ -63,6 +66,11 @@ impl From<&AppError> for ErrorResponse {
             AppError::Keychain(msg) => ErrorResponse {
                 code: "KEYCHAIN".into(),
                 message: format!("Keychain error: {msg}"),
+                recoverable: true,
+            },
+            AppError::Database(e) => ErrorResponse {
+                code: "DATABASE".into(),
+                message: format!("Database error: {e}"),
                 recoverable: true,
             },
             AppError::Internal(msg) => ErrorResponse {
