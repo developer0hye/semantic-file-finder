@@ -1,30 +1,73 @@
 # CLAUDE.md
 
-## Gemini API 개발 가이드라인
+## Language Policy
 
-- Gemini API 사용 시 반드시 Google 공식 문서를 참고할 것
+- All code, comments, commit messages, and documentation must be written in English.
+
+## Gemini API Development Guidelines
+
+- Always refer to Google's official documentation when using the Gemini API:
   - API Reference: https://ai.google.dev/gemini-api/docs
-  - Supported file types: https://ai.google.dev/gemini-api/docs/vision (이미지), https://ai.google.dev/gemini-api/docs/document-processing (문서)
+  - Supported file types: https://ai.google.dev/gemini-api/docs/vision (images), https://ai.google.dev/gemini-api/docs/document-processing (documents)
   - Embedding API: https://ai.google.dev/gemini-api/docs/embeddings
-- 기본 모델: `gemini-3-flash-preview` (임베딩: `gemini-embedding-001`, 1536차원)
-- 모델 ID, 지원 포맷, 파라미터 등은 변경될 수 있으므로 구현 전 최신 공식 문서에서 확인 필수
-- LLM이 생성한 정보(지원 포맷, API 스펙 등)를 그대로 신뢰하지 말고 공식 문서로 검증할 것
+- Default models: `gemini-3-flash-preview` (embedding: `gemini-embedding-001`, 1536 dimensions)
+- Model IDs, supported formats, and parameters may change — always verify with the latest official docs before implementation
+- Do not blindly trust LLM-generated information (supported formats, API specs, etc.) — validate against official documentation
 
-## 개발 환경 원칙
+## Development Environment Principles
 
-- 패키지 설치가 필요한 작업은 무조건 Docker 기반으로 개발하고 테스트할 것
-- 로컬 환경에 직접 pip install, npm install 등을 하지 말고 Docker 컨테이너 안에서 실행
-- 실험, 빌드, 테스트 모두 Dockerfile 또는 docker-compose로 재현 가능하게 구성
-- `.env` 파일은 프로젝트 루트에 하나만 두고, 각 docker-compose.yml에서 `env_file: ../../.env`로 참조
+- All tasks requiring package installation must be developed and tested using Docker
+- Do not run pip install, npm install, etc. directly on the local environment — execute inside Docker containers
+- All experiments, builds, and tests must be reproducible via Dockerfile or docker-compose
+- Keep a single `.env` file at the project root; reference it from each docker-compose.yml via `env_file: ../../.env`
 
-## 실험(experiments) 구조
+## Git Configuration
 
-- `experiments/` 아래에 기능별 하위 폴더를 만들어 실험을 관리할 것
-- 각 실험 폴더는 독립적으로 실행 가능해야 함 (자체 Dockerfile, docker-compose.yml, requirements.txt 포함)
-- 구조 예시:
+- All commits must use the local git config `user.name` and `user.email` for both author and committer. Verify with `git config user.name` and `git config user.email` before committing.
+- The expected git `user.name` is `Yonghye Kwon`. If the local git config `user.name` does not match, you **MUST** ask the user to confirm their identity before the first commit or push in the session. Once confirmed, do not ask again for the rest of the session.
+
+## Branching & PR Workflow
+
+- **All changes MUST go through a PR** — never commit directly to `main`, including doc-only edits
+- Branch naming: `<type>/<short-description>` (e.g., `feat/indexing-pipeline`, `fix/gemini-rate-limit`)
+- One focused unit of work per branch. For existing PRs, push to that branch instead of creating a new PR.
+
+**Worktree workflow (mandatory for PR branch changes):**
+- Create: `git worktree add ../semantic-file-finder-<branch-name> -b <type>/<short-description>`
+- Work and run all PR commands (`gh pr create`, `git push`, etc.) **from inside the worktree**, not the main repo
+- Do NOT remove a worktree while your working directory is inside it — return to main repo first: `cd /Users/yhkwon/Documents/Projects/semantic-file-finder && git worktree remove ../semantic-file-finder-<branch-name>`
+- Do NOT remove a worktree immediately after completing a task — only when starting a new task or user confirms
+- `git checkout`/`git switch` may be used only for local-only inspection tasks (no PR changes)
+
+### PR Merge Procedure
+
+Follow all steps in order — do not skip any.
+
+1. **Review PR description** — rewrite with `gh pr edit` if empty/lacking. Include what changed, why, key changes.
+2. **Search related issues** — `gh issue list`, reference with "Related: #N" (no auto-close keywords unless instructed)
+3. **Check conflicts** — if `main` advanced, use `git merge-tree` to check; rebase/merge to resolve if needed
+4. **Wait for CI** — `gh pr checks <number> --watch`. If CI fails, do NOT merge.
+5. **Final review** — `gh pr diff <number>`, check for debug code, hardcoded paths, secrets, unused imports. Mandatory even if CI is green.
+6. **Merge** — `gh pr merge <number> --merge` (**NEVER** use `--delete-branch` — worktree still uses the branch)
+7. **Update local main** — `cd /Users/yhkwon/Documents/Projects/semantic-file-finder && git pull`
+
+## anytomd Integration Policy
+
+- Use the `anytomd` Rust crate for document conversion (see PRD)
+- If bugs, unsupported formats, or conversion quality issues are discovered while using anytomd, contribute improvements directly to the anytomd repository
+  - anytomd repo: https://github.com/nicholasgasior/anytomd
+  - File issues or submit PRs with fixes
+  - Use a fork or git dependency for temporary integration until changes are merged upstream
+- Always write tests alongside anytomd improvements and ensure existing tests are not broken
+
+## Experiments Structure
+
+- Organize experiments in sub-folders under `experiments/`
+- Each experiment folder must be independently runnable (with its own Dockerfile, docker-compose.yml, requirements.txt)
+- Example structure:
   ```
   experiments/
-  ├── image-understanding/    # 이미지 포함 문서의 Gemini 이해도 비교 실험
-  ├── embedding-quality/      # 임베딩 품질 평가 실험 (예시)
+  ├── image-understanding/    # Gemini comprehension comparison for image-containing documents
+  ├── embedding-quality/      # Embedding quality evaluation experiment
   └── ...
   ```
