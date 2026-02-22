@@ -26,6 +26,11 @@ target
 # macOS
 .DS_Store
 
+# Node.js / Frontend
+node_modules/
+dist/
+package-lock.json
+
 # Experiment outputs
 experiments/**/test_files/
 experiments/**/results/

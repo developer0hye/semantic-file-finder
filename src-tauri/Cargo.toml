@@ -1,0 +1,31 @@
+[package]
+name = "semantic-file-search"
+version = "0.1.0"
+description = "A desktop application that searches local files using natural language"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "semantic_file_search_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "semantic-file-search"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+dirs = "6"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "z"
+lto = true
