@@ -8,8 +8,21 @@
   font-size: 16px;
   line-height: 24px;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  --bg-primary: #f6f6f6;
+  --bg-secondary: #ffffff;
+  --bg-hover: #eaeaea;
+  --text-primary: #0f0f0f;
+  --text-secondary: #555;
+  --border-color: #ddd;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #16a34a;
+  --error: #dc2626;
+  --keyword-color: #7c3aed;
+  --vector-color: #0891b2;
+
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -20,27 +33,478 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-hover: #333;
+    --text-primary: #e5e5e5;
+    --text-secondary: #999;
+    --border-color: #444;
   }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
 
-main {
-  max-width: 960px;
+/* App Layout */
+
+.app {
+  max-width: 800px;
   margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  padding: 1rem;
 }
 
-h1 {
-  font-size: 2rem;
-  line-height: 1.1;
+.app-nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.nav-button {
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.nav-button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.app-content {
+  text-align: left;
+}
+
+/* Shared button styles */
+
+button {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Shared input styles */
+
+input[type="text"],
+input[type="password"] {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--accent);
+}
+
+/* SearchBar */
+
+.search-bar {
+  margin-bottom: 1.5rem;
+}
+
+.search-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-input {
+  flex: 1;
+}
+
+.search-button {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.search-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.search-options {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mode-selector {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.mode-button {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+}
+
+.mode-button.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.alpha-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.alpha-slider input[type="range"] {
+  width: 120px;
+}
+
+/* ResultList */
+
+.result-list {
+  margin-top: 1rem;
+}
+
+.result-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.mode-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  font-size: 0.75rem;
+}
+
+.no-results {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.result-card {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.result-card:hover {
+  border-color: var(--accent);
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-filename {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.result-score {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.result-path {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0;
+  word-break: break-all;
+}
+
+.result-summary {
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+.result-scores {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.score-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.score-badge.keyword {
+  background: color-mix(in srgb, var(--keyword-color) 15%, transparent);
+  color: var(--keyword-color);
+}
+
+.score-badge.vector {
+  background: color-mix(in srgb, var(--vector-color) 15%, transparent);
+  color: var(--vector-color);
+}
+
+/* Error Banner */
+
+.error-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+/* Settings */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-section {
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.settings-section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.settings-section h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.settings-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.settings-hint a {
+  color: var(--accent);
+}
+
+.api-key-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.api-key-input {
+  flex: 1;
+}
+
+.status-ok {
+  font-size: 0.8rem;
+  color: var(--success);
+  margin-top: 0.5rem;
+}
+
+.status-error {
+  font-size: 0.8rem;
+  color: var(--error);
+  margin-top: 0.5rem;
+}
+
+/* Directories */
+
+.directory-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.directory-input {
+  flex: 1;
+}
+
+.directory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.directory-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.directory-list li:last-child {
+  border-bottom: none;
+}
+
+.directory-path {
+  word-break: break-all;
+}
+
+.remove-button {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  color: var(--error);
+  border-color: var(--error);
+  background: transparent;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.no-dirs {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Indexing */
+
+.indexing-info {
+  margin-bottom: 0.75rem;
+}
+
+.indexing-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.state-indicator {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.state-indicator.idle {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.state-indicator.running {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.state-indicator.paused {
+  background: color-mix(in srgb, orange 15%, transparent);
+  color: orange;
+}
+
+.failed-count {
+  color: var(--error);
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.current-file {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0;
+  word-break: break-all;
+}
+
+.indexing-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Stats */
+
+.stats-grid {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.extension-breakdown ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.extension-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.2rem 0;
+  font-size: 0.8rem;
 }
