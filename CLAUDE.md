@@ -41,6 +41,45 @@
 - Minimize dependencies; do not add a new crate for logic that can be implemented clearly in a small local module.
 - Before adding or upgrading a Rust dependency, verify the latest stable version on crates.io and check MSRV compatibility.
 
+## Code Architecture & Naming Standards
+
+### Single Responsibility per File
+
+Each source file must own exactly **one cohesive responsibility**. A file that does two unrelated things must be split.
+
+| Principle | Rule |
+|-----------|------|
+| **One module = one domain concept** | `db.rs` owns SQLite operations, `gemini.rs` owns Gemini API calls — never mix them |
+| **Split at the seam** | If a file grows beyond a single responsibility, extract the secondary concern into its own module immediately — not "later" |
+| **No god files** | A `utils.rs` or `helpers.rs` that accumulates unrelated functions is a design smell. Every function belongs in the module that owns its domain |
+| **Test files mirror source** | Each `foo.rs` contains its own `#[cfg(test)] mod tests` block. Integration tests go in `tests/` |
+
+**Heuristic:** If you cannot describe a file's purpose in a single sentence without using "and", it has too many responsibilities.
+
+### Naming Conventions
+
+Names are documentation. Every identifier — variable, function, type, file, directory — must communicate **what it represents or does** without requiring the reader to inspect its implementation.
+
+**General rules:**
+- Names must be **specific, not generic**. Avoid `data`, `info`, `item`, `result`, `value`, `temp`, `tmp` as standalone names. State *what* data, *which* result.
+- Abbreviations are acceptable only when universally understood in context (`db`, `config`, `ext`, `dir`). When in doubt, spell it out.
+- Boolean variables and functions use predicate form: `is_convertible`, `needs_gemini_upload`, `has_pending_files` — never `check_convertible` or `convertible_flag`.
+
+**Rust-specific:**
+- **Files/modules:** lowercase snake_case, named after the domain concept they own (`tantivy_index.rs`, `gemini.rs`, `platform.rs`)
+- **Structs/Enums:** PascalCase, noun phrases (`DocumentData`, `SearchResult`, `AppError`)
+- **Functions/methods:** snake_case, verb phrases describing the action (`upsert_document`, `load_config`, `normalize_path`)
+- **Constants:** SCREAMING_SNAKE_CASE with self-explanatory names (`KOREAN_TOKENIZER_NAME`, `DEFAULT_EMBEDDING_DIMENSIONS`)
+- **Type aliases:** use when the underlying type is complex and the alias adds semantic clarity (`EmbeddingRow`)
+
+**TypeScript/Frontend:**
+- **Files:** kebab-case for components (`SearchBar.tsx`), camelCase for utilities (`api.ts`)
+- **Components:** PascalCase matching the filename (`SearchBar`, `ResultList`)
+- **Functions/variables:** camelCase with verb-noun pattern (`fetchSearchResults`, `handleApiKeySubmit`)
+- **Types/interfaces:** PascalCase, no `I` prefix (`SearchResult`, not `ISearchResult`)
+
+**Directories:** Named after the bounded context they contain. `src-tauri/src/` modules map 1:1 to domain concepts. Never create catch-all directories like `misc/` or `common/`.
+
 ## Rust Testing and Verification — TDD Required
 
 **TDD is mandatory for all Rust features and bug fixes:** write failing test first, then implement minimum code to pass, then refactor. No exceptions.
