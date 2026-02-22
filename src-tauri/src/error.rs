@@ -19,6 +19,12 @@ pub enum AppError {
     #[error("Invalid API key")]
     InvalidApiKey,
 
+    #[error("Configuration error: {0}")]
+    Config(String),
+
+    #[error("Keychain error: {0}")]
+    Keychain(String),
+
     #[error("{0}")]
     Internal(String),
 }
@@ -48,6 +54,16 @@ impl From<&AppError> for ErrorResponse {
                 code: "INVALID_API_KEY".into(),
                 message: "Invalid API key".into(),
                 recoverable: false,
+            },
+            AppError::Config(msg) => ErrorResponse {
+                code: "CONFIG".into(),
+                message: format!("Configuration error: {msg}"),
+                recoverable: false,
+            },
+            AppError::Keychain(msg) => ErrorResponse {
+                code: "KEYCHAIN".into(),
+                message: format!("Keychain error: {msg}"),
+                recoverable: true,
             },
             AppError::Internal(msg) => ErrorResponse {
                 code: "INTERNAL".into(),
