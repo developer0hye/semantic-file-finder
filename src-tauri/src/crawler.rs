@@ -124,6 +124,7 @@ fn should_exclude(path: &Path, name: &str, exclude_set: &HashSet<&str>) -> bool 
 /// Return the list of all supported file extensions (convertible + gemini upload).
 pub fn all_supported_extensions() -> Vec<String> {
     vec![
+        // Documents
         ".pdf".into(),
         ".docx".into(),
         ".pptx".into(),
@@ -135,11 +136,66 @@ pub fn all_supported_extensions() -> Vec<String> {
         ".md".into(),
         ".html".into(),
         ".xml".into(),
+        // Images
         ".jpg".into(),
         ".jpeg".into(),
         ".png".into(),
         ".gif".into(),
         ".webp".into(),
+        // Source code
+        ".c".into(),
+        ".h".into(),
+        ".cpp".into(),
+        ".cc".into(),
+        ".cxx".into(),
+        ".hpp".into(),
+        ".hxx".into(),
+        ".hh".into(),
+        ".py".into(),
+        ".pyw".into(),
+        ".js".into(),
+        ".mjs".into(),
+        ".cjs".into(),
+        ".jsx".into(),
+        ".ts".into(),
+        ".mts".into(),
+        ".cts".into(),
+        ".tsx".into(),
+        ".rs".into(),
+        ".go".into(),
+        ".java".into(),
+        ".kt".into(),
+        ".kts".into(),
+        ".rb".into(),
+        ".swift".into(),
+        ".cs".into(),
+        ".php".into(),
+        ".sh".into(),
+        ".bash".into(),
+        ".zsh".into(),
+        ".fish".into(),
+        ".pl".into(),
+        ".pm".into(),
+        ".lua".into(),
+        ".r".into(),
+        ".scala".into(),
+        ".dart".into(),
+        ".ex".into(),
+        ".exs".into(),
+        ".erl".into(),
+        ".hs".into(),
+        ".ml".into(),
+        ".mli".into(),
+        ".sql".into(),
+        ".m".into(),
+        ".mm".into(),
+        ".zig".into(),
+        ".nim".into(),
+        ".v".into(),
+        ".groovy".into(),
+        ".ps1".into(),
+        ".bat".into(),
+        ".cmd".into(),
     ]
 }
 
@@ -167,7 +223,7 @@ mod tests {
         fs::write(dir.join("doc.pdf"), b"pdf content").unwrap();
         fs::write(dir.join("notes.txt"), b"text content").unwrap();
         fs::write(dir.join("image.png"), b"png content").unwrap();
-        fs::write(dir.join("script.py"), b"python code").unwrap(); // unsupported
+        fs::write(dir.join("script.py"), b"python code").unwrap(); // not in test extension list
 
         let extensions = vec![".pdf".into(), ".txt".into(), ".png".into()];
         let entries = crawl_directory(&dir, &[], &extensions);
@@ -330,6 +386,18 @@ mod tests {
         assert!(exts.contains(&".docx".to_string()));
         assert!(exts.contains(&".txt".to_string()));
         assert!(exts.contains(&".png".to_string()));
+    }
+
+    #[test]
+    fn test_all_supported_extensions_includes_code_formats() {
+        let exts = all_supported_extensions();
+        assert!(exts.contains(&".py".to_string()));
+        assert!(exts.contains(&".rs".to_string()));
+        assert!(exts.contains(&".js".to_string()));
+        assert!(exts.contains(&".ts".to_string()));
+        assert!(exts.contains(&".go".to_string()));
+        assert!(exts.contains(&".java".to_string()));
+        assert!(exts.contains(&".cpp".to_string()));
     }
 
     #[test]

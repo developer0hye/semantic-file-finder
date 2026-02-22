@@ -62,7 +62,13 @@ pub fn convert_bytes(data: &[u8], extension: &str) -> Result<ConversionOutput, A
 
 /// Extensions that anytomd can convert locally (no Gemini upload needed).
 const CONVERTIBLE_EXTENSIONS: &[&str] = &[
+    // Document formats
     "docx", "pptx", "xlsx", "xls", "csv", "json", "txt", "md", "html", "xml",
+    // Source code formats (added in anytomd 0.8)
+    "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "hh", "py", "pyw", "js", "mjs", "cjs", "jsx", "ts",
+    "mts", "cts", "tsx", "rs", "go", "java", "kt", "kts", "rb", "swift", "cs", "php", "sh", "bash",
+    "zsh", "fish", "pl", "pm", "lua", "r", "scala", "dart", "ex", "exs", "erl", "hs", "ml", "mli",
+    "sql", "m", "mm", "zig", "nim", "v", "groovy", "ps1", "bat", "cmd",
 ];
 
 /// Extensions that require Gemini Files API upload for analysis.
@@ -150,6 +156,34 @@ mod tests {
         let json = br#"{"name": "test", "value": 42}"#;
         let result = convert_bytes(json, "json").unwrap();
         assert!(result.markdown.contains("test"));
+    }
+
+    #[test]
+    fn test_is_convertible_source_code_extensions() {
+        assert!(is_convertible("py"));
+        assert!(is_convertible(".rs"));
+        assert!(is_convertible("js"));
+        assert!(is_convertible("ts"));
+        assert!(is_convertible("go"));
+        assert!(is_convertible("java"));
+        assert!(is_convertible("cpp"));
+        assert!(is_convertible("c"));
+        assert!(is_convertible("sh"));
+        assert!(is_convertible("sql"));
+    }
+
+    #[test]
+    fn test_convert_bytes_python_source() {
+        let code = b"def hello():\n    print('Hello, world!')";
+        let result = convert_bytes(code, "py").unwrap();
+        assert!(result.markdown.contains("hello"));
+    }
+
+    #[test]
+    fn test_convert_bytes_rust_source() {
+        let code = b"fn main() {\n    println!(\"Hello\");\n}";
+        let result = convert_bytes(code, "rs").unwrap();
+        assert!(result.markdown.contains("main"));
     }
 
     #[test]
