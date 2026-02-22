@@ -208,18 +208,21 @@ pub async fn start_indexing(
     );
 
     let gemini_guard = state.gemini.lock().await;
-    let gemini_client = gemini_guard.as_ref().ok_or_else(|| {
-        AppError::Internal("Gemini client not configured. Set API key first.".into())
-    })?;
-
-    // Create a clone of the GeminiClient for the pipeline
-    let gemini = Arc::new(GeminiClient::new(
-        gemini_client.api_key().to_string(),
-        gemini_client.model().to_string(),
-        gemini_client.embedding_model().to_string(),
-        gemini_client.embedding_dimensions(),
-    ));
+    let gemini: Option<Arc<GeminiClient>> = gemini_guard.as_ref().map(|client| {
+        Arc::new(GeminiClient::new(
+            client.api_key().to_string(),
+            client.model().to_string(),
+            client.embedding_model().to_string(),
+            client.embedding_dimensions(),
+        ))
+    });
     drop(gemini_guard);
+
+    if gemini.is_some() {
+        info!("indexing in full mode (Gemini available)");
+    } else {
+        info!("indexing in keyword-only mode (no Gemini API key)");
+    }
 
     let db = state.db.clone();
     let tantivy = state.tantivy.clone();
