@@ -25,6 +25,15 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    #[error("Gemini API error: {message} (status: {status_code})")]
+    GeminiApi { status_code: u16, message: String },
+
+    #[error("Gemini rate limit exceeded, retry after {retry_after_secs}s")]
+    GeminiRateLimit { retry_after_secs: u64 },
+
+    #[error("Embedding generation failed for query")]
+    EmbeddingFailed { query: String },
+
     #[error("Document conversion failed: {path}")]
     ConversionFailed { path: String, detail: String },
 
@@ -69,6 +78,24 @@ impl From<&AppError> for ErrorResponse {
             AppError::Keychain(msg) => ErrorResponse {
                 code: "KEYCHAIN".into(),
                 message: format!("Keychain error: {msg}"),
+                recoverable: true,
+            },
+            AppError::GeminiApi {
+                status_code,
+                message,
+            } => ErrorResponse {
+                code: "GEMINI_API".into(),
+                message: format!("Gemini API error (status {status_code}): {message}"),
+                recoverable: true,
+            },
+            AppError::GeminiRateLimit { retry_after_secs } => ErrorResponse {
+                code: "GEMINI_RATE_LIMIT".into(),
+                message: format!("Rate limit exceeded, retry after {retry_after_secs}s"),
+                recoverable: true,
+            },
+            AppError::EmbeddingFailed { query } => ErrorResponse {
+                code: "EMBEDDING_FAILED".into(),
+                message: format!("Embedding generation failed for: {query}"),
                 recoverable: true,
             },
             AppError::ConversionFailed { path, detail } => ErrorResponse {

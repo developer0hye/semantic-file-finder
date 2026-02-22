@@ -2,6 +2,7 @@ pub mod config;
 pub mod converter;
 pub mod db;
 pub mod error;
+pub mod gemini;
 pub mod keychain;
 pub mod logging;
 pub mod platform;
