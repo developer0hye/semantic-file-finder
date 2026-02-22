@@ -54,6 +54,12 @@ export async function updateConfig(newConfig: AppConfig): Promise<void> {
   return invoke("update_config", { newConfig });
 }
 
+// === Extensions ===
+
+export async function getAllSupportedExtensions(): Promise<string[]> {
+  return invoke("get_all_supported_extensions");
+}
+
 // === File ===
 
 export async function openFile(filePath: string): Promise<void> {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, IndexedStats, IndexingStatus } from "../types";
 import {
+  getAllSupportedExtensions,
   getConfig,
   getIndexedStats,
   getIndexingStatus,
@@ -18,6 +19,7 @@ export default function Settings() {
   const [apiKeyStatus, setApiKeyStatus] = useState<"idle" | "validating" | "valid" | "invalid">("idle");
 
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [allExtensions, setAllExtensions] = useState<string[]>([]);
   const [newDirectory, setNewDirectory] = useState("");
 
   const [indexingStatus, setIndexingStatus] = useState<IndexingStatus | null>(null);
@@ -33,14 +35,16 @@ export default function Settings() {
 
   async function loadSettings() {
     try {
-      const [cfg, st, status] = await Promise.all([
+      const [cfg, st, status, exts] = await Promise.all([
         getConfig(),
         getIndexedStats(),
         getIndexingStatus(),
+        getAllSupportedExtensions(),
       ]);
       setConfig(cfg);
       setStats(st);
       setIndexingStatus(status);
+      setAllExtensions(exts);
     } catch (err) {
       setError(String(err));
     }
@@ -141,6 +145,64 @@ export default function Settings() {
     }
   }
 
+  const extensionCategories: { name: string; extensions: string[] }[] = [
+    {
+      name: "Documents",
+      extensions: allExtensions.filter((ext) =>
+        [".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".csv", ".json", ".txt", ".md", ".html", ".xml"].includes(ext),
+      ),
+    },
+    {
+      name: "Images",
+      extensions: allExtensions.filter((ext) =>
+        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".ico"].includes(ext),
+      ),
+    },
+    {
+      name: "Source Code",
+      extensions: allExtensions.filter((ext) =>
+        ![".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".csv", ".json", ".txt", ".md", ".html", ".xml",
+          ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".svg", ".ico"].includes(ext),
+      ),
+    },
+  ].filter((cat) => cat.extensions.length > 0);
+
+  async function handleToggleExtension(ext: string) {
+    if (!config) return;
+    const enabled = config.supported_extensions.includes(ext);
+    const updated = {
+      ...config,
+      supported_extensions: enabled
+        ? config.supported_extensions.filter((e) => e !== ext)
+        : [...config.supported_extensions, ext],
+    };
+    try {
+      await updateConfig(updated);
+      setConfig(updated);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function handleToggleCategory(extensions: string[], selectAll: boolean) {
+    if (!config) return;
+    const currentSet = new Set(config.supported_extensions);
+    for (const ext of extensions) {
+      if (selectAll) {
+        currentSet.add(ext);
+      } else {
+        currentSet.delete(ext);
+      }
+    }
+    const updated = { ...config, supported_extensions: [...currentSet] };
+    try {
+      await updateConfig(updated);
+      setConfig(updated);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
   function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -214,6 +276,42 @@ export default function Settings() {
           )}
         </ul>
       </section>
+
+      {config && allExtensions.length > 0 && (
+        <section className="settings-section">
+          <h2>Supported Extensions</h2>
+          <div className="extension-editor">
+            {extensionCategories.map((category) => {
+              const allSelected = category.extensions.every((ext) =>
+                config.supported_extensions.includes(ext),
+              );
+              return (
+                <div key={category.name} className="extension-category">
+                  <div className="extension-category-header">
+                    <h3>{category.name}</h3>
+                    <button onClick={() => handleToggleCategory(category.extensions, !allSelected)}>
+                      {allSelected ? "Deselect All" : "Select All"}
+                    </button>
+                  </div>
+                  <div className="extension-grid">
+                    {category.extensions.map((ext) => (
+                      <div key={ext} className="extension-item">
+                        <input
+                          type="checkbox"
+                          id={`ext-${ext}`}
+                          checked={config.supported_extensions.includes(ext)}
+                          onChange={() => handleToggleExtension(ext)}
+                        />
+                        <label htmlFor={`ext-${ext}`}>{ext}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="settings-section">
         <h2>Indexing</h2>

@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::config::{self, AppConfig};
-use crate::crawler::crawl_directory;
+use crate::crawler::{self, crawl_directory};
 use crate::db::Database;
 use crate::error::AppError;
 use crate::gemini::GeminiClient;
@@ -311,6 +311,13 @@ pub async fn update_config(
     Ok(())
 }
 
+// === Extensions ===
+
+#[tauri::command]
+pub fn get_all_supported_extensions() -> Vec<String> {
+    crawler::all_supported_extensions()
+}
+
 // === File ===
 
 #[tauri::command]
@@ -389,6 +396,20 @@ mod tests {
 
         let vector: FrontendSearchMode = serde_json::from_str(r#""VectorOnly""#).unwrap();
         assert!(matches!(vector, FrontendSearchMode::VectorOnly));
+    }
+
+    #[test]
+    fn test_get_all_supported_extensions_returns_nonempty_list() {
+        let extensions = get_all_supported_extensions();
+        assert!(!extensions.is_empty());
+        // All extensions must start with a dot
+        for ext in &extensions {
+            assert!(ext.starts_with('.'), "extension {ext} must start with '.'");
+        }
+        // Must include common document and image formats
+        assert!(extensions.contains(&".pdf".to_string()));
+        assert!(extensions.contains(&".txt".to_string()));
+        assert!(extensions.contains(&".png".to_string()));
     }
 
     #[test]
