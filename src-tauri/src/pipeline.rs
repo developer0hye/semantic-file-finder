@@ -75,7 +75,7 @@ pub struct ProcessedFile {
 
 /// Process a single file without Gemini (keyword-only mode).
 ///
-/// - Convertible formats: anytomd → raw markdown as summary, filename-based keywords, empty embedding
+/// - Convertible formats: anytomd → plain text as summary, filename-based keywords, empty embedding
 /// - Gemini-upload formats (PDF, images): returns error — caller should enqueue as pending
 pub async fn process_single_file_without_gemini(path: &Path) -> Result<ProcessedFile, AppError> {
     let ext = path
@@ -105,7 +105,7 @@ pub async fn process_single_file_without_gemini(path: &Path) -> Result<Processed
         Ok(ProcessedFile {
             file_path: normalized,
             analysis: DocumentAnalysis {
-                summary: output.markdown,
+                summary: output.plain_text,
                 keywords,
                 language: String::new(),
                 doc_type: String::new(),

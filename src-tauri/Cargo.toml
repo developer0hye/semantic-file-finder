@@ -24,7 +24,7 @@ tracing-appender = "0.2"
 dirs = "6"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 rusqlite = { version = "0.34", features = ["bundled"] }
-anytomd = "0.7"
+anytomd = "0.10"
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 base64 = "0.22"
