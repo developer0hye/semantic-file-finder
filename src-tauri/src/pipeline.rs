@@ -73,6 +73,93 @@ pub struct ProcessedFile {
     pub embedding: Vec<f32>,
 }
 
+/// Process a single file without Gemini (keyword-only mode).
+///
+/// - Convertible formats: anytomd → plain text as summary, filename-based keywords, empty embedding
+/// - Gemini-upload formats (PDF, images): returns error — caller should enqueue as pending
+pub async fn process_single_file_without_gemini(path: &Path) -> Result<ProcessedFile, AppError> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let normalized = normalize_path(path);
+
+    if converter::is_convertible(&ext) {
+        let output = tokio::task::spawn_blocking({
+            let path = path.to_path_buf();
+            move || converter::convert_file(&path)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("spawn_blocking failed: {e}")))??;
+
+        let file_stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        let keywords = extract_filename_keywords(&file_stem);
+
+        Ok(ProcessedFile {
+            file_path: normalized,
+            analysis: DocumentAnalysis {
+                summary: output.plain_text,
+                keywords,
+                language: String::new(),
+                doc_type: String::new(),
+            },
+            embedding: vec![],
+        })
+    } else if converter::needs_gemini_upload(&ext) {
+        Err(AppError::Internal(format!(
+            "file requires Gemini API for processing: {}",
+            normalized
+        )))
+    } else {
+        Err(AppError::UnsupportedFormat {
+            extension: ext.to_string(),
+        })
+    }
+}
+
+/// Extract keyword tokens from a filename stem.
+///
+/// Splits on common delimiters (underscore, hyphen, space, dot, CamelCase boundaries)
+/// and returns lowercased, non-empty tokens.
+fn extract_filename_keywords(stem: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+
+    // Split on common delimiters first
+    for part in stem.split(['_', '-', ' ', '.']) {
+        // Further split on CamelCase boundaries
+        let mut current = String::new();
+        for ch in part.chars() {
+            if ch.is_uppercase() && !current.is_empty() {
+                let lower = current.to_lowercase();
+                if !lower.is_empty() {
+                    tokens.push(lower);
+                }
+                current.clear();
+            }
+            current.push(ch);
+        }
+        if !current.is_empty() {
+            let lower = current.to_lowercase();
+            if !lower.is_empty() {
+                tokens.push(lower);
+            }
+        }
+    }
+
+    // Deduplicate while preserving order
+    let mut seen = std::collections::HashSet::new();
+    tokens.retain(|t| seen.insert(t.clone()));
+
+    tokens
+}
+
 /// Analyze and embed a single file using the Gemini service.
 ///
 /// This is the core processing function that handles format-specific logic:
@@ -210,7 +297,7 @@ pub fn store_result(
 /// Processes files concurrently using a semaphore to limit Gemini API calls.
 /// Files that fail are recorded in the pending_files table for retry.
 pub async fn run_pipeline<G: GeminiService + 'static>(
-    gemini: Arc<G>,
+    gemini: Option<Arc<G>>,
     db: Arc<Mutex<Database>>,
     tantivy: Arc<Mutex<TantivyIndex>>,
     entries: Vec<CrawlEntry>,
@@ -294,7 +381,12 @@ pub async fn run_pipeline<G: GeminiService + 'static>(
                 }
             };
 
-            match process_single_file(Path::new(&entry.file_path), gemini.as_ref()).await {
+            let process_result = match gemini.as_deref() {
+                Some(g) => process_single_file(Path::new(&entry.file_path), g).await,
+                None => process_single_file_without_gemini(Path::new(&entry.file_path)).await,
+            };
+
+            match process_result {
                 Ok(processed) => {
                     let _ = result_tx.send(Ok((entry, file_hash, processed))).await;
                 }
@@ -747,7 +839,7 @@ mod tests {
         let pause_flag = Arc::new(AtomicBool::new(false));
 
         run_pipeline(
-            gemini,
+            Some(gemini),
             db.clone(),
             tantivy,
             entries,
@@ -790,7 +882,7 @@ mod tests {
 
         // First run
         run_pipeline(
-            gemini.clone(),
+            Some(gemini.clone()),
             db.clone(),
             tantivy.clone(),
             entries,
@@ -817,7 +909,7 @@ mod tests {
         }));
 
         run_pipeline(
-            gemini,
+            Some(gemini),
             db.clone(),
             tantivy,
             entries2,
@@ -854,9 +946,17 @@ mod tests {
         }));
         let pause_flag = Arc::new(AtomicBool::new(false));
 
-        run_pipeline(gemini, db, tantivy, vec![], 2, status.clone(), pause_flag)
-            .await
-            .unwrap();
+        run_pipeline(
+            Some(gemini),
+            db,
+            tantivy,
+            vec![],
+            2,
+            status.clone(),
+            pause_flag,
+        )
+        .await
+        .unwrap();
 
         let s = status.lock().await;
         assert_eq!(s.state, IndexingState::Idle);
@@ -882,5 +982,159 @@ mod tests {
         assert!(is_leap_year(2024));
         assert!(!is_leap_year(1900));
         assert!(!is_leap_year(2023));
+    }
+
+    #[test]
+    fn test_extract_filename_keywords_snake_case() {
+        let keywords = extract_filename_keywords("quarterly_report_2024");
+        assert!(keywords.contains(&"quarterly".to_string()));
+        assert!(keywords.contains(&"report".to_string()));
+        assert!(keywords.contains(&"2024".to_string()));
+    }
+
+    #[test]
+    fn test_extract_filename_keywords_camel_case() {
+        let keywords = extract_filename_keywords("QuarterlyReport");
+        assert!(keywords.contains(&"quarterly".to_string()));
+        assert!(keywords.contains(&"report".to_string()));
+    }
+
+    #[test]
+    fn test_extract_filename_keywords_mixed_delimiters() {
+        let keywords = extract_filename_keywords("my-project_v2.final");
+        assert!(keywords.contains(&"my".to_string()));
+        assert!(keywords.contains(&"project".to_string()));
+        assert!(keywords.contains(&"v2".to_string()));
+        assert!(keywords.contains(&"final".to_string()));
+    }
+
+    #[test]
+    fn test_extract_filename_keywords_deduplication() {
+        let keywords = extract_filename_keywords("test_test_test");
+        assert_eq!(keywords.iter().filter(|k| *k == "test").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_process_single_file_without_gemini_txt() {
+        let dir = create_test_dir("no_gemini_txt");
+        let path = dir.join("hello_world.txt");
+        fs::write(&path, "Hello, this is a test document.").unwrap();
+
+        let result = process_single_file_without_gemini(&path).await.unwrap();
+
+        assert!(result.file_path.ends_with("hello_world.txt"));
+        // Summary is the raw markdown from anytomd
+        assert!(result.analysis.summary.contains("Hello"));
+        // Keywords extracted from filename
+        assert!(result.analysis.keywords.contains(&"hello".to_string()));
+        assert!(result.analysis.keywords.contains(&"world".to_string()));
+        // No embedding in keyword-only mode
+        assert!(result.embedding.is_empty());
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_process_single_file_without_gemini_pdf_skipped() {
+        let dir = create_test_dir("no_gemini_pdf");
+        let path = dir.join("document.pdf");
+        fs::write(&path, b"%PDF-1.4 fake pdf content").unwrap();
+
+        let result = process_single_file_without_gemini(&path).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("requires Gemini API"));
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_run_pipeline_without_gemini_indexes_convertible_files() {
+        let dir = create_test_dir("no_gemini_pipeline");
+        fs::write(dir.join("a.txt"), "Document A content").unwrap();
+        fs::write(dir.join("b.txt"), "Document B content").unwrap();
+
+        let db = Arc::new(Mutex::new(Database::open_in_memory().unwrap()));
+        let tantivy = Arc::new(Mutex::new(TantivyIndex::open_in_ram().unwrap()));
+
+        let entries = crawl_directory(&dir, &[], &[".txt".into()]);
+        assert_eq!(entries.len(), 2);
+
+        let status = Arc::new(Mutex::new(IndexingStatus {
+            state: IndexingState::Idle,
+            total_files: 0,
+            indexed_files: 0,
+            failed_files: 0,
+            current_file: None,
+        }));
+        let pause_flag = Arc::new(AtomicBool::new(false));
+
+        run_pipeline(
+            None::<Arc<MockGemini>>,
+            db.clone(),
+            tantivy,
+            entries,
+            2,
+            status.clone(),
+            pause_flag,
+        )
+        .await
+        .unwrap();
+
+        let s = status.lock().await;
+        assert_eq!(s.state, IndexingState::Idle);
+        assert_eq!(s.indexed_files, 2);
+        assert_eq!(s.failed_files, 0);
+
+        let db_guard = db.lock().await;
+        assert_eq!(db_guard.get_indexed_count().unwrap(), 2);
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_run_pipeline_without_gemini_skips_upload_formats() {
+        let dir = create_test_dir("no_gemini_skip_upload");
+        fs::write(dir.join("doc.txt"), "Text document").unwrap();
+        fs::write(dir.join("photo.png"), b"fake png data").unwrap();
+        fs::write(dir.join("report.pdf"), b"%PDF-1.4 fake").unwrap();
+
+        let db = Arc::new(Mutex::new(Database::open_in_memory().unwrap()));
+        let tantivy = Arc::new(Mutex::new(TantivyIndex::open_in_ram().unwrap()));
+
+        let entries = crawl_directory(&dir, &[], &[".txt".into(), ".png".into(), ".pdf".into()]);
+        assert_eq!(entries.len(), 3);
+
+        let status = Arc::new(Mutex::new(IndexingStatus {
+            state: IndexingState::Idle,
+            total_files: 0,
+            indexed_files: 0,
+            failed_files: 0,
+            current_file: None,
+        }));
+        let pause_flag = Arc::new(AtomicBool::new(false));
+
+        run_pipeline(
+            None::<Arc<MockGemini>>,
+            db.clone(),
+            tantivy,
+            entries,
+            2,
+            status.clone(),
+            pause_flag,
+        )
+        .await
+        .unwrap();
+
+        let s = status.lock().await;
+        // Only txt should be indexed, pdf and png should fail (enqueued as pending)
+        assert_eq!(s.indexed_files, 1);
+        assert_eq!(s.failed_files, 2);
+
+        let db_guard = db.lock().await;
+        assert_eq!(db_guard.get_indexed_count().unwrap(), 1);
+
+        cleanup(&dir);
     }
 }

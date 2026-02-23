@@ -7,6 +7,7 @@ use crate::error::AppError;
 /// Wrapper result from document conversion.
 pub struct ConversionOutput {
     pub markdown: String,
+    pub plain_text: String,
     pub images: Vec<ImageData>,
     pub title: Option<String>,
     pub warnings: Vec<String>,
@@ -21,6 +22,7 @@ pub struct ImageData {
 fn map_result(result: anytomd::ConversionResult) -> ConversionOutput {
     ConversionOutput {
         markdown: result.markdown,
+        plain_text: result.plain_text,
         images: result
             .images
             .into_iter()
