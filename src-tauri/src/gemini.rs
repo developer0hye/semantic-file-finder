@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::error::AppError;
+use crate::pipeline::GeminiService;
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -353,6 +354,41 @@ Response format:
             })?;
 
         Ok(analysis)
+    }
+}
+
+impl GeminiService for GeminiClient {
+    async fn analyze_text(&self, text: &str) -> Result<DocumentAnalysis, AppError> {
+        self.analyze_text(text).await
+    }
+
+    async fn analyze_text_with_images(
+        &self,
+        text: &str,
+        images: &[(String, Vec<u8>)],
+    ) -> Result<DocumentAnalysis, AppError> {
+        self.analyze_text_with_images(text, images).await
+    }
+
+    async fn upload_file(
+        &self,
+        data: &[u8],
+        mime_type: &str,
+        display_name: &str,
+    ) -> Result<String, AppError> {
+        self.upload_file(data, mime_type, display_name).await
+    }
+
+    async fn analyze_uploaded_file(
+        &self,
+        file_uri: &str,
+        mime_type: &str,
+    ) -> Result<DocumentAnalysis, AppError> {
+        self.analyze_uploaded_file(file_uri, mime_type).await
+    }
+
+    async fn embed_text(&self, text: &str, task_type: &str) -> Result<Vec<f32>, AppError> {
+        self.embed_text(text, task_type).await
     }
 }
 
