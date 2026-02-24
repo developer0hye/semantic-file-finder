@@ -496,6 +496,60 @@ input[type="password"]:focus {
   color: var(--text-secondary);
 }
 
+/* Extension Editor */
+
+.extension-editor {
+  margin-top: 0.25rem;
+}
+
+.extension-category {
+  margin-bottom: 0.75rem;
+}
+
+.extension-category:last-child {
+  margin-bottom: 0;
+}
+
+.extension-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.extension-category-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.extension-category-header button {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.extension-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.25rem;
+}
+
+.extension-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.extension-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.extension-item label {
+  cursor: pointer;
+  user-select: none;
+}
+
 .extension-breakdown ul {
   list-style: none;
   margin: 0;
