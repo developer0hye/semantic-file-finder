@@ -186,6 +186,21 @@ Before merging any PR, verify:
 - All commits must use the local git config `user.name` and `user.email` for both author and committer. Verify with `git config user.name` and `git config user.email` before committing.
 - The expected git `user.name` is `Yonghye Kwon`. If the local git config `user.name` does not match, you **MUST** ask the user to confirm their identity before the first commit or push in the session. Once confirmed, do not ask again for the rest of the session.
 
+### DCO (Developer Certificate of Origin) — Mandatory
+
+**Every commit MUST include a `Signed-off-by` line.** This is enforced by the DCO bot on all PRs.
+
+- Use the `--signoff` (or `-s`) flag on every `git commit`:
+  ```bash
+  git commit --signoff -m "feat: add new feature"
+  ```
+- The sign-off line is automatically appended:
+  ```
+  Signed-off-by: Yonghye Kwon <developer.0hye@gmail.com>
+  ```
+- If you forget, amend the commit: `git commit --amend --signoff --no-edit`
+- **PRs with unsigned commits will fail the DCO check and MUST NOT be merged.**
+
 ## Branching & PR Workflow
 
 - **All changes MUST go through a PR** — never commit directly to `main`, including doc-only edits
