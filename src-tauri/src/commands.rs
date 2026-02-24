@@ -14,7 +14,7 @@ use crate::db::Database;
 use crate::error::AppError;
 use crate::gemini::GeminiClient;
 use crate::keychain;
-use crate::pipeline::{self, GeminiService, IndexingStatus};
+use crate::pipeline::{self, IndexingStatus};
 use crate::platform::default_exclude_dirs;
 use crate::search::{self, SearchMode};
 use crate::tantivy_index::TantivyIndex;
@@ -64,41 +64,6 @@ pub enum FrontendSearchMode {
     Hybrid,
     KeywordOnly,
     VectorOnly,
-}
-
-impl GeminiService for GeminiClient {
-    async fn analyze_text(&self, text: &str) -> Result<crate::gemini::DocumentAnalysis, AppError> {
-        self.analyze_text(text).await
-    }
-
-    async fn analyze_text_with_images(
-        &self,
-        text: &str,
-        images: &[(String, Vec<u8>)],
-    ) -> Result<crate::gemini::DocumentAnalysis, AppError> {
-        self.analyze_text_with_images(text, images).await
-    }
-
-    async fn upload_file(
-        &self,
-        data: &[u8],
-        mime_type: &str,
-        display_name: &str,
-    ) -> Result<String, AppError> {
-        self.upload_file(data, mime_type, display_name).await
-    }
-
-    async fn analyze_uploaded_file(
-        &self,
-        file_uri: &str,
-        mime_type: &str,
-    ) -> Result<crate::gemini::DocumentAnalysis, AppError> {
-        self.analyze_uploaded_file(file_uri, mime_type).await
-    }
-
-    async fn embed_text(&self, text: &str, task_type: &str) -> Result<Vec<f32>, AppError> {
-        self.embed_text(text, task_type).await
-    }
 }
 
 // === Search ===

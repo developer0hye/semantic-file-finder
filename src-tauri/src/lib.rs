@@ -1,3 +1,4 @@
+pub mod app_init;
 pub mod commands;
 pub mod config;
 pub mod converter;
@@ -47,47 +48,25 @@ pub fn run() {
                 "application started"
             );
 
-            // Initialize database
-            let db_path = app_data_dir.join("index.db");
-            let database = db::Database::open(&db_path).expect("failed to open database");
-
-            // Initialize Tantivy index
-            let tantivy_path = app_data_dir.join("tantivy_index");
-            std::fs::create_dir_all(&tantivy_path)
-                .expect("failed to create tantivy_index directory");
-            let mut tantivy = tantivy_index::TantivyIndex::open(&tantivy_path)
-                .expect("failed to open Tantivy index");
-
-            // Reconcile any pending_tantivy records from previous interrupted indexing
-            match pipeline::reconcile_pending_tantivy(&database, &mut tantivy) {
-                Ok(count) if count > 0 => {
-                    info!(reconciled = count, "reconciled pending_tantivy records");
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to reconcile pending_tantivy");
-                }
-                _ => {}
-            }
-
-            // Load configuration
-            let app_config = config::load_config(&app_data_dir).unwrap_or_default();
+            let resources = app_init::initialize(&app_data_dir)
+                .expect("failed to initialize application resources");
 
             // Try to load API key and create Gemini client
             let gemini_client = keychain::get_api_key().ok().flatten().map(|key| {
                 gemini::GeminiClient::new(
                     key,
-                    app_config.gemini_model.clone(),
-                    app_config.embedding_model.clone(),
-                    app_config.embedding_dimensions,
+                    resources.config.gemini_model.clone(),
+                    resources.config.embedding_model.clone(),
+                    resources.config.embedding_dimensions,
                 )
             });
 
             let state = AppState {
-                db: Arc::new(Mutex::new(database)),
-                tantivy: Arc::new(Mutex::new(tantivy)),
+                db: Arc::new(Mutex::new(resources.db)),
+                tantivy: Arc::new(Mutex::new(resources.tantivy)),
                 gemini: Arc::new(Mutex::new(gemini_client)),
-                config: Arc::new(Mutex::new(app_config)),
-                data_dir: app_data_dir,
+                config: Arc::new(Mutex::new(resources.config)),
+                data_dir: resources.data_dir,
                 indexing_status: Arc::new(Mutex::new(IndexingStatus {
                     state: IndexingState::Idle,
                     total_files: 0,
