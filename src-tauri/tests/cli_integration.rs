@@ -8,7 +8,8 @@ use semantic_file_search_lib::app_init;
 use semantic_file_search_lib::config;
 use semantic_file_search_lib::crawler::crawl_directory;
 use semantic_file_search_lib::pipeline::{self, IndexingState, IndexingStatus};
-use semantic_file_search_lib::search::{self, SearchMode};
+use semantic_file_search_lib::search::{self, SearchMode, SearchParams};
+use semantic_file_search_lib::tantivy_index::SearchFilters;
 use tokio::sync::Mutex;
 
 fn create_test_dir(name: &str) -> PathBuf {
@@ -33,9 +34,12 @@ fn test_cli_search_returns_json_structure() {
         "test query",
         None,
         &embeddings,
-        SearchMode::KeywordOnly,
-        0.4,
-        20,
+        &SearchParams {
+            mode: SearchMode::KeywordOnly,
+            alpha: 0.4,
+            limit: 20,
+            filters: &SearchFilters::default(),
+        },
     )
     .unwrap();
 
@@ -56,9 +60,12 @@ fn test_cli_search_empty_index() {
         "nonexistent document",
         None,
         &embeddings,
-        SearchMode::KeywordOnly,
-        0.4,
-        20,
+        &SearchParams {
+            mode: SearchMode::KeywordOnly,
+            alpha: 0.4,
+            limit: 20,
+            filters: &SearchFilters::default(),
+        },
     )
     .unwrap();
 
@@ -121,9 +128,12 @@ async fn test_cli_index_txt_files() {
         "hello world",
         None,
         &embeddings,
-        SearchMode::KeywordOnly,
-        0.4,
-        10,
+        &SearchParams {
+            mode: SearchMode::KeywordOnly,
+            alpha: 0.4,
+            limit: 10,
+            filters: &SearchFilters::default(),
+        },
     )
     .unwrap();
     assert!(!results.is_empty());
@@ -246,9 +256,12 @@ async fn test_cli_index_then_search_end_to_end() {
         "revenue",
         None,
         &embeddings,
-        SearchMode::KeywordOnly,
-        0.4,
-        10,
+        &SearchParams {
+            mode: SearchMode::KeywordOnly,
+            alpha: 0.4,
+            limit: 10,
+            filters: &SearchFilters::default(),
+        },
     )
     .unwrap();
 

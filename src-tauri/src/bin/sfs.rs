@@ -15,6 +15,7 @@ use semantic_file_search_lib::gemini::GeminiClient;
 use semantic_file_search_lib::pipeline::{self, IndexingState, IndexingStatus};
 use semantic_file_search_lib::platform::default_exclude_dirs;
 use semantic_file_search_lib::search::{self, SearchMode};
+use semantic_file_search_lib::tantivy_index::SearchFilters;
 
 /// Semantic File Search CLI for LLM AI tool integration.
 #[derive(Parser)]
@@ -28,7 +29,7 @@ struct Cli {
 enum Commands {
     /// Search indexed files by natural language query.
     Search {
-        /// The search query.
+        /// The search query (use empty string "" for browse mode with filters).
         query: String,
         /// Maximum number of results to return.
         #[arg(long, default_value_t = 20)]
@@ -39,6 +40,18 @@ enum Commands {
         /// Weight for keyword score in hybrid mode (0.0–1.0).
         #[arg(long, default_value_t = 0.4)]
         alpha: f32,
+        /// Filter by file extensions (comma-separated, without dots, e.g., "pdf,docx").
+        #[arg(long, value_delimiter = ',')]
+        extensions: Vec<String>,
+        /// Only include files modified after this date (ISO 8601, e.g., "2024-01-01").
+        #[arg(long)]
+        after: Option<String>,
+        /// Only include files modified before this date (ISO 8601, e.g., "2024-12-31").
+        #[arg(long)]
+        before: Option<String>,
+        /// Filter by directory prefixes (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        dirs: Vec<String>,
     },
     /// Index files from configured or specified directories.
     Index {
@@ -113,6 +126,52 @@ fn parse_search_mode(mode: &str) -> Result<SearchMode, AppError> {
     }
 }
 
+/// Parse an ISO 8601 date string (e.g., "2024-01-01") into a Unix timestamp.
+fn parse_iso_date_to_unix(date_str: &str) -> Result<i64, AppError> {
+    // Try "YYYY-MM-DD" format → midnight UTC
+    let parts: Vec<&str> = date_str.split('-').collect();
+    if parts.len() != 3 {
+        return Err(AppError::Internal(format!(
+            "invalid date format: {date_str}. Expected YYYY-MM-DD"
+        )));
+    }
+    let year: i32 = parts[0]
+        .parse()
+        .map_err(|_| AppError::Internal(format!("invalid year in date: {date_str}")))?;
+    let month: u32 = parts[1]
+        .parse()
+        .map_err(|_| AppError::Internal(format!("invalid month in date: {date_str}")))?;
+    let day: u32 = parts[2]
+        .parse()
+        .map_err(|_| AppError::Internal(format!("invalid day in date: {date_str}")))?;
+
+    // Days from Unix epoch (1970-01-01) to the given date
+    // Using a simple calculation: convert to days since epoch
+    let days = days_since_epoch(year, month, day)
+        .ok_or_else(|| AppError::Internal(format!("invalid date: {date_str}")))?;
+    Ok(days * 86400)
+}
+
+/// Calculate days since Unix epoch (1970-01-01) for a given date.
+fn days_since_epoch(year: i32, month: u32, day: u32) -> Option<i64> {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    // Adjust for months (Jan/Feb use previous year's March-based calculation)
+    let (y, m) = if month <= 2 {
+        (year as i64 - 1, month as i64 + 9)
+    } else {
+        (year as i64, month as i64 - 3)
+    };
+    // Days from civil date using era-based formula
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * m + 2) / 5 + day as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    Some(days)
+}
+
 fn app_error_to_code(err: &AppError) -> &'static str {
     match err {
         AppError::FileIo { .. } => "FILE_IO",
@@ -131,10 +190,37 @@ fn app_error_to_code(err: &AppError) -> &'static str {
     }
 }
 
-async fn run_search(query: String, limit: usize, mode: String, alpha: f32) -> Result<(), AppError> {
+/// CLI filter arguments for the search command.
+struct CliSearchFilters {
+    extensions: Vec<String>,
+    after: Option<String>,
+    before: Option<String>,
+    dirs: Vec<String>,
+}
+
+async fn run_search(
+    query: String,
+    limit: usize,
+    mode: String,
+    alpha: f32,
+    cli_filters: CliSearchFilters,
+) -> Result<(), AppError> {
+    let CliSearchFilters {
+        extensions,
+        after,
+        before,
+        dirs,
+    } = cli_filters;
     let search_mode = parse_search_mode(&mode)?;
     let data_dir = app_init::resolve_data_dir()?;
     let resources = app_init::initialize(&data_dir)?;
+
+    let search_filters = SearchFilters {
+        file_extensions: extensions,
+        date_after: after.as_deref().map(parse_iso_date_to_unix).transpose()?,
+        date_before: before.as_deref().map(parse_iso_date_to_unix).transpose()?,
+        directories: dirs,
+    };
 
     // Build Gemini client from GEMINI_API_KEY env var if available
     let gemini_client = std::env::var("GEMINI_API_KEY").ok().map(|key| {
@@ -157,7 +243,18 @@ async fn run_search(query: String, limit: usize, mode: String, alpha: f32) -> Re
         None
     };
 
-    let document_embeddings = resources.db.get_all_embeddings()?;
+    // Pre-filter embeddings if filters are active
+    let document_embeddings = if search_filters.has_any_filter() {
+        let valid_ids = resources.db.get_filtered_db_ids(&search_filters)?;
+        resources
+            .db
+            .get_all_embeddings()?
+            .into_iter()
+            .filter(|(id, _, _, _)| valid_ids.contains(id))
+            .collect()
+    } else {
+        resources.db.get_all_embeddings()?
+    };
 
     let mode_used = if query_embedding.is_some() && search_mode != SearchMode::KeywordOnly {
         search_mode
@@ -166,14 +263,18 @@ async fn run_search(query: String, limit: usize, mode: String, alpha: f32) -> Re
     };
 
     let start = std::time::Instant::now();
+    let params = search::SearchParams {
+        mode: mode_used,
+        alpha,
+        limit,
+        filters: &search_filters,
+    };
     let results = search::hybrid_search(
         &resources.tantivy,
         &query,
         query_embedding.as_deref(),
         &document_embeddings,
-        mode_used,
-        alpha,
-        limit,
+        &params,
     )?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
@@ -381,7 +482,25 @@ async fn main() {
             limit,
             mode,
             alpha,
-        } => run_search(query, limit, mode, alpha).await,
+            extensions,
+            after,
+            before,
+            dirs,
+        } => {
+            run_search(
+                query,
+                limit,
+                mode,
+                alpha,
+                CliSearchFilters {
+                    extensions,
+                    after,
+                    before,
+                    dirs,
+                },
+            )
+            .await
+        }
         Commands::Index {
             directories,
             concurrency,

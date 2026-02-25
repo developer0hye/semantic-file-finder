@@ -17,7 +17,7 @@ use crate::keychain;
 use crate::pipeline::{self, IndexingStatus};
 use crate::platform::default_exclude_dirs;
 use crate::search::{self, SearchMode};
-use crate::tantivy_index::TantivyIndex;
+use crate::tantivy_index::{SearchFilters, TantivyIndex};
 use crate::watcher::FileWatcher;
 
 /// Shared application state managed by Tauri.
@@ -75,6 +75,30 @@ pub enum FrontendSearchMode {
     VectorOnly,
 }
 
+/// Search filters from the frontend.
+#[derive(Debug, Deserialize)]
+pub struct FrontendSearchFilters {
+    /// File extensions to filter by (without dots, e.g., ["pdf", "docx"]).
+    pub file_types: Option<Vec<String>>,
+    /// Only include files modified at or after this Unix timestamp.
+    pub date_after: Option<i64>,
+    /// Only include files modified at or before this Unix timestamp.
+    pub date_before: Option<i64>,
+    /// Only include files under these directory prefixes.
+    pub directories: Option<Vec<String>>,
+}
+
+impl FrontendSearchFilters {
+    fn into_search_filters(self) -> SearchFilters {
+        SearchFilters {
+            file_extensions: self.file_types.unwrap_or_default(),
+            date_after: self.date_after,
+            date_before: self.date_before,
+            directories: self.directories.unwrap_or_default(),
+        }
+    }
+}
+
 // === Search ===
 
 #[tauri::command]
@@ -84,10 +108,14 @@ pub async fn search_files(
     limit: Option<usize>,
     mode: Option<FrontendSearchMode>,
     alpha: Option<f32>,
+    filters: Option<FrontendSearchFilters>,
 ) -> Result<SearchResponse, AppError> {
     let start = std::time::Instant::now();
     let limit = limit.unwrap_or(20);
     let alpha = alpha.unwrap_or(0.4);
+    let search_filters = filters
+        .map(FrontendSearchFilters::into_search_filters)
+        .unwrap_or_default();
 
     let search_mode = match mode {
         Some(FrontendSearchMode::KeywordOnly) => SearchMode::KeywordOnly,
@@ -109,7 +137,18 @@ pub async fn search_files(
 
     let db_guard = state.db.lock().await;
     let tantivy_guard = state.tantivy.lock().await;
-    let document_embeddings = db_guard.get_all_embeddings()?;
+
+    // Pre-filter embeddings using DB-level filters when active
+    let document_embeddings = if search_filters.has_any_filter() {
+        let valid_ids = db_guard.get_filtered_db_ids(&search_filters)?;
+        db_guard
+            .get_all_embeddings()?
+            .into_iter()
+            .filter(|(id, _, _, _)| valid_ids.contains(id))
+            .collect()
+    } else {
+        db_guard.get_all_embeddings()?
+    };
 
     let mode_used = if query_embedding.is_some() && search_mode != SearchMode::KeywordOnly {
         search_mode
@@ -117,14 +156,18 @@ pub async fn search_files(
         SearchMode::KeywordOnly
     };
 
+    let params = search::SearchParams {
+        mode: mode_used,
+        alpha,
+        limit,
+        filters: &search_filters,
+    };
     let results = search::hybrid_search(
         &tantivy_guard,
         &query,
         query_embedding.as_deref(),
         &document_embeddings,
-        mode_used,
-        alpha,
-        limit,
+        &params,
     )?;
 
     let mode_str = match mode_used {
@@ -469,6 +512,31 @@ mod tests {
         assert!(extensions.contains(&".pdf".to_string()));
         assert!(extensions.contains(&".txt".to_string()));
         assert!(extensions.contains(&".png".to_string()));
+    }
+
+    #[test]
+    fn test_frontend_search_filters_deserialization() {
+        let json =
+            r#"{"file_types":["pdf","docx"],"date_after":1704067200,"directories":["/docs"]}"#;
+        let filters: FrontendSearchFilters = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            filters.file_types.as_ref().unwrap(),
+            &vec!["pdf".to_string(), "docx".to_string()]
+        );
+        assert_eq!(filters.date_after, Some(1704067200));
+        assert!(filters.date_before.is_none());
+
+        let search_filters = filters.into_search_filters();
+        assert_eq!(search_filters.file_extensions.len(), 2);
+        assert_eq!(search_filters.directories, vec!["/docs".to_string()]);
+    }
+
+    #[test]
+    fn test_frontend_search_filters_empty_deserialization() {
+        let json = r#"{}"#;
+        let filters: FrontendSearchFilters = serde_json::from_str(json).unwrap();
+        let search_filters = filters.into_search_filters();
+        assert!(!search_filters.has_any_filter());
     }
 
     #[test]

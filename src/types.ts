@@ -48,6 +48,13 @@ export interface WatcherStatus {
   watched_directories: string[];
 }
 
+export interface SearchFilters {
+  file_types?: string[];
+  date_after?: number;
+  date_before?: number;
+  directories?: string[];
+}
+
 export interface ErrorResponse {
   code: string;
   message: string;

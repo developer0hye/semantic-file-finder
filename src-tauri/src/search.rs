@@ -4,7 +4,7 @@ use rayon::prelude::*;
 
 use crate::db::bytes_to_embedding;
 use crate::error::AppError;
-use crate::tantivy_index::TantivyIndex;
+use crate::tantivy_index::{SearchFilters, TantivyIndex};
 use crate::vector_search::{VectorSearchResult, vector_search};
 
 /// Search mode determines which search strategies are used.
@@ -16,6 +16,14 @@ pub enum SearchMode {
     KeywordOnly,
     /// Vector search only (cosine similarity).
     VectorOnly,
+}
+
+/// Configuration parameters for a hybrid search query.
+pub struct SearchParams<'a> {
+    pub mode: SearchMode,
+    pub alpha: f32,
+    pub limit: usize,
+    pub filters: &'a SearchFilters,
 }
 
 /// A merged search result with scores from both search strategies.
@@ -56,19 +64,26 @@ fn normalize_scores(scores: &[f32]) -> Vec<f32> {
 /// - `tantivy_index`: the full-text search index
 /// - `query_text`: the user's search query
 /// - `query_embedding`: the embedded query vector (None triggers KeywordOnly fallback)
-/// - `document_embeddings`: all indexed embeddings as `(db_id, file_path, embedding_bytes, embedding_dim)`
-/// - `mode`: the search strategy to use
-/// - `alpha`: weight for keyword score in [0.0, 1.0]. final = α * keyword + (1-α) * vector
-/// - `limit`: max number of results to return
+/// - `document_embeddings`: all indexed embeddings as `(db_id, file_path, embedding_bytes, embedding_dim)`.
+///   The caller should pre-filter these when search filters are active.
+/// - `params`: search configuration (mode, alpha, limit, filters)
 pub fn hybrid_search(
     tantivy_index: &TantivyIndex,
     query_text: &str,
     query_embedding: Option<&[f32]>,
     document_embeddings: &[(i64, String, Vec<u8>, i32)],
-    mode: SearchMode,
-    alpha: f32,
-    limit: usize,
+    params: &SearchParams<'_>,
 ) -> Result<Vec<HybridSearchResult>, AppError> {
+    let SearchParams {
+        mode,
+        alpha,
+        limit,
+        filters,
+    } = params;
+    let mode = *mode;
+    let alpha = *alpha;
+    let limit = *limit;
+
     // Determine effective mode: degrade to KeywordOnly if embedding is missing
     let effective_mode = match mode {
         SearchMode::Hybrid if query_embedding.is_none() => SearchMode::KeywordOnly,
@@ -80,21 +95,32 @@ pub fn hybrid_search(
         other => other,
     };
 
-    // Collect keyword results
+    // Collect keyword results (with filters applied at the Tantivy level)
     let keyword_results = if effective_mode != SearchMode::VectorOnly {
-        tantivy_index.search(query_text, limit * 2)?
+        tantivy_index.search_with_filters(query_text, limit * 2, filters)?
     } else {
         vec![]
     };
 
-    // Collect vector results
+    // Collect vector results, post-filtering by directory prefix
     let vector_results: Vec<VectorSearchResult> = if effective_mode != SearchMode::KeywordOnly {
         if let Some(qe) = query_embedding {
             let decoded: Vec<(i64, String, Vec<f32>)> = document_embeddings
                 .par_iter()
                 .map(|(id, path, bytes, _dim)| (*id, path.clone(), bytes_to_embedding(bytes)))
                 .collect();
-            vector_search(qe, &decoded, limit * 2)
+            let mut vr = vector_search(qe, &decoded, limit * 2);
+            // Post-filter vector results by directory prefix (Tantivy handles this
+            // for keyword results, but vector search bypasses Tantivy)
+            if !filters.directories.is_empty() {
+                vr.retain(|r| {
+                    filters
+                        .directories
+                        .iter()
+                        .any(|dir| r.file_path.starts_with(dir))
+                });
+            }
+            vr
         } else {
             vec![]
         }
@@ -170,7 +196,22 @@ pub fn hybrid_search(
 mod tests {
     use super::*;
     use crate::db::embedding_to_bytes;
-    use crate::tantivy_index::{DocumentData, TantivyIndex};
+    use crate::tantivy_index::{DocumentData, SearchFilters, TantivyIndex};
+
+    fn default_params(mode: SearchMode, alpha: f32, limit: usize) -> SearchParams<'static> {
+        static DEFAULT_FILTERS: SearchFilters = SearchFilters {
+            file_extensions: Vec::new(),
+            date_after: None,
+            date_before: None,
+            directories: Vec::new(),
+        };
+        SearchParams {
+            mode,
+            alpha,
+            limit,
+            filters: &DEFAULT_FILTERS,
+        }
+    }
 
     fn create_test_index_with_docs() -> TantivyIndex {
         let mut idx = TantivyIndex::open_in_ram().expect("Failed to create in-RAM index");
@@ -271,9 +312,7 @@ mod tests {
             "revenue report",
             None, // no embedding
             &embeddings,
-            SearchMode::KeywordOnly,
-            0.4,
-            10,
+            &default_params(SearchMode::KeywordOnly, 0.4, 10),
         )
         .unwrap();
 
@@ -297,9 +336,7 @@ mod tests {
             "",
             Some(&query_emb),
             &embeddings,
-            SearchMode::VectorOnly,
-            0.4,
-            10,
+            &default_params(SearchMode::VectorOnly, 0.4, 10),
         )
         .unwrap();
 
@@ -323,9 +360,7 @@ mod tests {
             "revenue report",
             Some(&query_emb),
             &embeddings,
-            SearchMode::Hybrid,
-            0.4,
-            10,
+            &default_params(SearchMode::Hybrid, 0.4, 10),
         )
         .unwrap();
 
@@ -353,9 +388,7 @@ mod tests {
             "budget planning",
             None,
             &embeddings,
-            SearchMode::Hybrid,
-            0.4,
-            10,
+            &default_params(SearchMode::Hybrid, 0.4, 10),
         )
         .unwrap();
 
@@ -374,9 +407,7 @@ mod tests {
             "query",
             None, // no embedding
             &embeddings,
-            SearchMode::VectorOnly,
-            0.4,
-            10,
+            &default_params(SearchMode::VectorOnly, 0.4, 10),
         );
 
         assert!(result.is_err());
@@ -393,9 +424,7 @@ mod tests {
             "revenue",
             Some(&query_emb),
             &embeddings,
-            SearchMode::Hybrid,
-            0.0, // alpha=0 means pure vector
-            10,
+            &default_params(SearchMode::Hybrid, 0.0, 10),
         )
         .unwrap();
 
@@ -419,9 +448,7 @@ mod tests {
             "revenue",
             Some(&query_emb),
             &embeddings,
-            SearchMode::Hybrid,
-            1.0, // alpha=1 means pure keyword
-            10,
+            &default_params(SearchMode::Hybrid, 1.0, 10),
         )
         .unwrap();
 
@@ -445,9 +472,7 @@ mod tests {
             "report",
             Some(&query_emb),
             &embeddings,
-            SearchMode::Hybrid,
-            0.4,
-            1,
+            &default_params(SearchMode::Hybrid, 0.4, 1),
         )
         .unwrap();
 
@@ -464,9 +489,7 @@ mod tests {
             "",
             None,
             &embeddings,
-            SearchMode::KeywordOnly,
-            0.4,
-            10,
+            &default_params(SearchMode::KeywordOnly, 0.4, 10),
         )
         .unwrap();
 
