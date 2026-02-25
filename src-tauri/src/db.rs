@@ -1,9 +1,11 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+use crate::tantivy_index::SearchFilters;
 
 /// A file record stored in the `files` table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +241,69 @@ impl Database {
             params![state, id],
         )?;
         Ok(())
+    }
+
+    // ---- filter queries ----
+
+    /// Get IDs of indexed files matching the given search filters.
+    ///
+    /// Builds a dynamic SQL query with WHERE clauses for extension, date range,
+    /// and directory prefix filters. Returns a set of matching file IDs that can
+    /// be used to pre-filter embeddings for vector search.
+    pub fn get_filtered_db_ids(&self, filters: &SearchFilters) -> Result<HashSet<i64>, AppError> {
+        let mut sql = String::from("SELECT id FROM files WHERE index_state = 'indexed'");
+        let mut bind_values: Vec<rusqlite::types::Value> = Vec::new();
+
+        // Extension filter: DB stores with dot prefix (e.g., ".pdf"), SearchFilters without
+        if !filters.file_extensions.is_empty() {
+            let placeholders: Vec<String> = (0..filters.file_extensions.len())
+                .map(|i| format!("?{}", bind_values.len() + i + 1))
+                .collect();
+            sql.push_str(&format!(" AND file_ext IN ({})", placeholders.join(", ")));
+            for ext in &filters.file_extensions {
+                bind_values.push(rusqlite::types::Value::Text(format!(".{ext}")));
+            }
+        }
+
+        // Date range filter: convert stored ISO text to Unix timestamp for comparison
+        if let Some(after) = filters.date_after {
+            bind_values.push(rusqlite::types::Value::Integer(after));
+            sql.push_str(&format!(
+                " AND CAST(strftime('%s', modified_at) AS INTEGER) >= ?{}",
+                bind_values.len()
+            ));
+        }
+        if let Some(before) = filters.date_before {
+            bind_values.push(rusqlite::types::Value::Integer(before));
+            sql.push_str(&format!(
+                " AND CAST(strftime('%s', modified_at) AS INTEGER) <= ?{}",
+                bind_values.len()
+            ));
+        }
+
+        // Directory prefix filter: OR across multiple directory prefixes
+        if !filters.directories.is_empty() {
+            let dir_clauses: Vec<String> = (0..filters.directories.len())
+                .map(|i| format!("file_path LIKE ?{}", bind_values.len() + i + 1))
+                .collect();
+            sql.push_str(&format!(" AND ({})", dir_clauses.join(" OR ")));
+            for dir in &filters.directories {
+                bind_values.push(rusqlite::types::Value::Text(format!("{dir}%")));
+            }
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = bind_values
+            .iter()
+            .map(|v| v as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(param_refs.as_slice(), |row| row.get::<_, i64>(0))?;
+
+        let mut ids = HashSet::new();
+        for row in rows {
+            ids.insert(row?);
+        }
+        Ok(ids)
     }
 
     // ---- pending_files CRUD ----
@@ -576,5 +641,149 @@ mod tests {
         assert!(bytes.is_empty());
         let restored = bytes_to_embedding(&bytes);
         assert!(restored.is_empty());
+    }
+
+    // ---- get_filtered_db_ids tests ----
+
+    fn insert_filter_test_records(db: &Database) {
+        let embedding = embedding_to_bytes(&[0.1, 0.2, 0.3]);
+
+        // PDF in /docs/reports, modified 2024-03-01
+        db.upsert_file(&FileRecord {
+            id: 0,
+            file_path: "/docs/reports/revenue.pdf".to_string(),
+            file_name: "revenue.pdf".to_string(),
+            file_ext: ".pdf".to_string(),
+            file_size: 1024,
+            file_hash: "hash1".to_string(),
+            modified_at: "2024-03-01T00:00:00Z".to_string(),
+            indexed_at: "2024-03-01T00:00:00Z".to_string(),
+            summary: "Revenue report".to_string(),
+            keywords: "revenue".to_string(),
+            embedding: embedding.clone(),
+            embedding_dim: 3,
+            index_state: "indexed".to_string(),
+            last_error: None,
+        })
+        .unwrap();
+
+        // DOCX in /docs/contracts, modified 2024-07-15
+        db.upsert_file(&FileRecord {
+            id: 0,
+            file_path: "/docs/contracts/employment.docx".to_string(),
+            file_name: "employment.docx".to_string(),
+            file_ext: ".docx".to_string(),
+            file_size: 2048,
+            file_hash: "hash2".to_string(),
+            modified_at: "2024-07-15T00:00:00Z".to_string(),
+            indexed_at: "2024-07-15T00:00:00Z".to_string(),
+            summary: "Employment contract".to_string(),
+            keywords: "contract".to_string(),
+            embedding: embedding.clone(),
+            embedding_dim: 3,
+            index_state: "indexed".to_string(),
+            last_error: None,
+        })
+        .unwrap();
+
+        // TXT in /docs/reports, modified 2023-11-01
+        db.upsert_file(&FileRecord {
+            id: 0,
+            file_path: "/docs/reports/notes.txt".to_string(),
+            file_name: "notes.txt".to_string(),
+            file_ext: ".txt".to_string(),
+            file_size: 512,
+            file_hash: "hash3".to_string(),
+            modified_at: "2023-11-01T00:00:00Z".to_string(),
+            indexed_at: "2023-11-01T00:00:00Z".to_string(),
+            summary: "Meeting notes".to_string(),
+            keywords: "notes".to_string(),
+            embedding,
+            embedding_dim: 3,
+            index_state: "indexed".to_string(),
+            last_error: None,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_get_filtered_db_ids_by_extension() {
+        let db = Database::open_in_memory().unwrap();
+        insert_filter_test_records(&db);
+
+        let filters = SearchFilters {
+            file_extensions: vec!["pdf".to_string()],
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 1);
+
+        // Multiple extensions
+        let filters = SearchFilters {
+            file_extensions: vec!["pdf".to_string(), "docx".to_string()],
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn test_get_filtered_db_ids_by_date_range() {
+        let db = Database::open_in_memory().unwrap();
+        insert_filter_test_records(&db);
+
+        // After 2024-01-01 (1704067200)
+        let filters = SearchFilters {
+            date_after: Some(1704067200),
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 2); // revenue.pdf (2024-03) + employment.docx (2024-07)
+
+        // Before 2024-06-01 (1717200000)
+        let filters = SearchFilters {
+            date_before: Some(1717200000),
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 2); // revenue.pdf (2024-03) + notes.txt (2023-11)
+    }
+
+    #[test]
+    fn test_get_filtered_db_ids_combined() {
+        let db = Database::open_in_memory().unwrap();
+        insert_filter_test_records(&db);
+
+        // PDF files modified after 2024-01-01 in /docs/reports
+        let filters = SearchFilters {
+            file_extensions: vec!["pdf".to_string()],
+            date_after: Some(1704067200),
+            directories: vec!["/docs/reports".to_string()],
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 1); // only revenue.pdf
+    }
+
+    #[test]
+    fn test_get_filtered_db_ids_no_filters_returns_all() {
+        let db = Database::open_in_memory().unwrap();
+        insert_filter_test_records(&db);
+
+        let ids = db.get_filtered_db_ids(&SearchFilters::default()).unwrap();
+        assert_eq!(ids.len(), 3);
+    }
+
+    #[test]
+    fn test_get_filtered_db_ids_directory_filter() {
+        let db = Database::open_in_memory().unwrap();
+        insert_filter_test_records(&db);
+
+        let filters = SearchFilters {
+            directories: vec!["/docs/contracts".to_string()],
+            ..Default::default()
+        };
+        let ids = db.get_filtered_db_ids(&filters).unwrap();
+        assert_eq!(ids.len(), 1);
     }
 }

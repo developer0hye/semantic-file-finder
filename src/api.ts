@@ -3,6 +3,7 @@ import type {
   AppConfig,
   IndexedStats,
   IndexingStatus,
+  SearchFilters,
   SearchMode,
   SearchResponse,
   WatcherStatus,
@@ -15,8 +16,9 @@ export async function searchFiles(
   limit?: number,
   mode?: SearchMode,
   alpha?: number,
+  filters?: SearchFilters,
 ): Promise<SearchResponse> {
-  return invoke("search_files", { query, limit, mode, alpha });
+  return invoke("search_files", { query, limit, mode, alpha, filters });
 }
 
 // === Indexing ===
