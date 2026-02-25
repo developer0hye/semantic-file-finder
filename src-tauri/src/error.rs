@@ -43,6 +43,11 @@ pub enum AppError {
     #[error("Search index error: {0}")]
     SearchIndex(String),
 
+    #[error(
+        "File watcher limit exceeded for {directory}. Increase fs.inotify.max_user_watches on Linux."
+    )]
+    WatcherLimitExceeded { directory: String },
+
     #[error("{0}")]
     Internal(String),
 }
@@ -114,6 +119,15 @@ impl From<&AppError> for ErrorResponse {
             AppError::SearchIndex(msg) => ErrorResponse {
                 code: "SEARCH_INDEX".into(),
                 message: format!("Search index error: {msg}"),
+                recoverable: true,
+            },
+            AppError::WatcherLimitExceeded { directory } => ErrorResponse {
+                code: "WATCHER_LIMIT_EXCEEDED".into(),
+                message: format!(
+                    "File watcher limit exceeded for {directory}. \
+                     On Linux, increase fs.inotify.max_user_watches: \
+                     echo 524288 | sudo tee /proc/sys/fs/inotify/max_user_watches"
+                ),
                 recoverable: true,
             },
             AppError::Internal(msg) => ErrorResponse {

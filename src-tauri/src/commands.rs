@@ -18,6 +18,7 @@ use crate::pipeline::{self, IndexingStatus};
 use crate::platform::default_exclude_dirs;
 use crate::search::{self, SearchMode};
 use crate::tantivy_index::TantivyIndex;
+use crate::watcher::FileWatcher;
 
 /// Shared application state managed by Tauri.
 pub struct AppState {
@@ -28,6 +29,14 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub indexing_status: Arc<Mutex<IndexingStatus>>,
     pub pause_flag: Arc<AtomicBool>,
+    pub watcher: Arc<Mutex<Option<FileWatcher>>>,
+}
+
+/// Status of the file system watcher.
+#[derive(Debug, Serialize)]
+pub struct WatcherStatus {
+    pub is_running: bool,
+    pub watched_directories: Vec<String>,
 }
 
 /// Search response returned to the frontend.
@@ -269,9 +278,24 @@ pub async fn update_config(
     state: State<'_, AppState>,
     new_config: AppConfig,
 ) -> Result<(), AppError> {
+    let old_watch_dirs = {
+        let config = state.config.lock().await;
+        config.watch_directories.clone()
+    };
+
     config::save_config(&state.data_dir, &new_config)?;
-    let mut config = state.config.lock().await;
-    *config = new_config;
+
+    let watch_dirs_changed = old_watch_dirs != new_config.watch_directories;
+
+    {
+        let mut config = state.config.lock().await;
+        *config = new_config;
+    }
+
+    if watch_dirs_changed {
+        restart_watcher_internal(&state).await?;
+    }
+
     info!("configuration updated");
     Ok(())
 }
@@ -290,6 +314,76 @@ pub async fn open_file(file_path: String) -> Result<(), AppError> {
     tauri_plugin_opener::open_path(&file_path, None::<&str>)
         .map_err(|e| AppError::Internal(format!("failed to open file: {e}")))
 }
+
+// === Watcher ===
+
+#[tauri::command]
+pub async fn get_watcher_status(state: State<'_, AppState>) -> Result<WatcherStatus, AppError> {
+    let watcher = state.watcher.lock().await;
+    match watcher.as_ref() {
+        Some(w) => Ok(WatcherStatus {
+            is_running: true,
+            watched_directories: w
+                .watched_directories()
+                .iter()
+                .map(|d| d.display().to_string())
+                .collect(),
+        }),
+        None => Ok(WatcherStatus {
+            is_running: false,
+            watched_directories: vec![],
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn restart_watcher(state: State<'_, AppState>) -> Result<WatcherStatus, AppError> {
+    restart_watcher_internal(&state).await?;
+    get_watcher_status(state).await
+}
+
+#[tauri::command]
+pub async fn stop_watcher(state: State<'_, AppState>) -> Result<(), AppError> {
+    let mut watcher = state.watcher.lock().await;
+    if watcher.is_some() {
+        *watcher = None;
+        info!("file watcher stopped");
+    }
+    Ok(())
+}
+
+/// Internal helper to restart the file watcher from the current config.
+async fn restart_watcher_internal(state: &AppState) -> Result<(), AppError> {
+    let config = state.config.lock().await;
+    let directories = config.watch_directories.clone();
+    let extensions = config.supported_extensions.clone();
+    drop(config);
+
+    let exclude_dirs: Vec<String> = default_exclude_dirs()
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    let new_watcher = FileWatcher::start(
+        directories,
+        extensions,
+        exclude_dirs,
+        state.db.clone(),
+        state.tantivy.clone(),
+        state.gemini.clone(),
+    )?;
+
+    let mut watcher = state.watcher.lock().await;
+    *watcher = new_watcher;
+
+    if watcher.is_some() {
+        info!("file watcher restarted");
+    }
+
+    Ok(())
+}
+
+// === Stats ===
 
 #[tauri::command]
 pub async fn get_indexed_stats(state: State<'_, AppState>) -> Result<IndexedStats, AppError> {

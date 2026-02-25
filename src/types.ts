@@ -43,6 +43,11 @@ export interface AppConfig {
   search_alpha: number;
 }
 
+export interface WatcherStatus {
+  is_running: boolean;
+  watched_directories: string[];
+}
+
 export interface ErrorResponse {
   code: string;
   message: string;
