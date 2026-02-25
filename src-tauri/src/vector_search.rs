@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 /// A single vector search result.
 #[derive(Debug, Clone)]
 pub struct VectorSearchResult {
@@ -44,7 +46,7 @@ pub fn vector_search(
     limit: usize,
 ) -> Vec<VectorSearchResult> {
     let mut scored: Vec<VectorSearchResult> = embeddings
-        .iter()
+        .par_iter()
         .map(|(db_id, file_path, emb)| VectorSearchResult {
             db_id: *db_id,
             file_path: file_path.clone(),
@@ -152,6 +154,47 @@ mod tests {
 
         let results = vector_search(&query, &embeddings, 3);
         assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn test_vector_search_large_dataset_correctness() {
+        const NUM_DOCS: usize = 10_000;
+        const DIM: usize = 1536;
+
+        // Create a query vector
+        let query: Vec<f32> = (0..DIM).map(|i| ((i % 7) as f32) * 0.1).collect();
+
+        // Create NUM_DOCS embeddings with one known-best match at index 42
+        let mut embeddings: Vec<(i64, String, Vec<f32>)> = (0..NUM_DOCS)
+            .map(|i| {
+                let emb: Vec<f32> = (0..DIM).map(|d| ((d + i) % 11) as f32 * 0.05).collect();
+                (i as i64, format!("/doc_{i}.txt"), emb)
+            })
+            .collect();
+
+        // Plant a near-identical vector at index 42
+        embeddings[42].2 = query.iter().map(|v| v + 0.0001).collect();
+
+        let limit = 5;
+        let results = vector_search(&query, &embeddings, limit);
+
+        assert_eq!(results.len(), limit);
+        // The planted near-identical vector must be the top result
+        assert_eq!(results[0].db_id, 42, "Expected db_id 42 as top result");
+        assert!(
+            results[0].score > 0.99,
+            "Expected score > 0.99, got {}",
+            results[0].score
+        );
+        // Results must be sorted by descending score
+        for i in 0..results.len() - 1 {
+            assert!(
+                results[i].score >= results[i + 1].score,
+                "Results not sorted at position {i}: {} >= {} failed",
+                results[i].score,
+                results[i + 1].score
+            );
+        }
     }
 
     #[test]

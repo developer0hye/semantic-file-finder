@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use rayon::prelude::*;
+
 use crate::db::bytes_to_embedding;
 use crate::error::AppError;
 use crate::tantivy_index::TantivyIndex;
@@ -89,7 +91,7 @@ pub fn hybrid_search(
     let vector_results: Vec<VectorSearchResult> = if effective_mode != SearchMode::KeywordOnly {
         if let Some(qe) = query_embedding {
             let decoded: Vec<(i64, String, Vec<f32>)> = document_embeddings
-                .iter()
+                .par_iter()
                 .map(|(id, path, bytes, _dim)| (*id, path.clone(), bytes_to_embedding(bytes)))
                 .collect();
             vector_search(qe, &decoded, limit * 2)
