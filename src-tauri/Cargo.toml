@@ -38,6 +38,7 @@ lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 blake3 = "1"
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
+notify-debouncer-full = "0.7"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 

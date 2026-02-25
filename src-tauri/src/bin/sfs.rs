@@ -126,6 +126,7 @@ fn app_error_to_code(err: &AppError) -> &'static str {
         AppError::ConversionFailed { .. } => "CONVERSION_FAILED",
         AppError::Database(_) => "DATABASE",
         AppError::SearchIndex(_) => "SEARCH_INDEX",
+        AppError::WatcherLimitExceeded { .. } => "WATCHER_LIMIT_EXCEEDED",
         AppError::Internal(_) => "INTERNAL",
     }
 }

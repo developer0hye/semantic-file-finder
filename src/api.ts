@@ -5,6 +5,7 @@ import type {
   IndexingStatus,
   SearchMode,
   SearchResponse,
+  WatcherStatus,
 } from "./types";
 
 // === Search ===
@@ -68,4 +69,18 @@ export async function openFile(filePath: string): Promise<void> {
 
 export async function getIndexedStats(): Promise<IndexedStats> {
   return invoke("get_indexed_stats");
+}
+
+// === Watcher ===
+
+export async function getWatcherStatus(): Promise<WatcherStatus> {
+  return invoke("get_watcher_status");
+}
+
+export async function restartWatcher(): Promise<WatcherStatus> {
+  return invoke("restart_watcher");
+}
+
+export async function stopWatcher(): Promise<void> {
+  return invoke("stop_watcher");
 }

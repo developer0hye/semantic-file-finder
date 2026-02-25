@@ -518,7 +518,7 @@ fn mime_for_extension(ext: &str) -> &'static str {
     }
 }
 
-fn chrono_now_iso8601() -> String {
+pub(crate) fn chrono_now_iso8601() -> String {
     // Use system time for ISO 8601 timestamp
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -527,7 +527,7 @@ fn chrono_now_iso8601() -> String {
     format_unix_timestamp(now as i64)
 }
 
-fn format_unix_timestamp(unix_secs: i64) -> String {
+pub(crate) fn format_unix_timestamp(unix_secs: i64) -> String {
     // Simple ISO 8601 formatting without external chrono dependency
     let secs = unix_secs;
     let days = secs / 86400;
