@@ -12,6 +12,7 @@ pub mod pipeline;
 pub mod platform;
 pub mod search;
 pub mod tantivy_index;
+pub mod tray;
 pub mod vector_search;
 pub mod watcher;
 
@@ -106,7 +107,15 @@ pub fn run() {
 
             app.manage(state);
 
+            tray::setup_tray(app)?;
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::search_files,
@@ -128,5 +137,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, _event| {});
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+            api.prevent_exit();
+        }
+    });
 }
